@@ -1,0 +1,18 @@
+{
+    "frames": {
+      "racket_1": { "frame": { "x": 0, "y": 0, "w": 64, "h": 64 } },
+      "racket_2": { "frame": { "x": 64, "y": 0, "w": 64, "h": 64 } },
+      "racket_3": { "frame": { "x": 128, "y": 0, "w": 64, "h": 64 } },
+      "racket_4": { "frame": { "x": 192, "y": 0, "w": 64, "h": 64 } },
+      "racket_5": { "frame": { "x": 0, "y": 64, "w": 64, "h": 64 } },
+      "racket_6": { "frame": { "x": 64, "y": 64, "w": 64, "h": 64 } },
+      "racket_7": { "frame": { "x": 128, "y": 64, "w": 64, "h": 64 } },
+      "racket_8": { "frame": { "x": 192, "y": 64, "w": 64, "h": 64 } }
+    },
+    "meta": {
+      "image": "rackets.png",
+      "size": { "w": 256, "h": 128 },
+      "scale": "1"
+    }
+}
+  
