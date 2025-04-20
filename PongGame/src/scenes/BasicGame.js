@@ -26,6 +26,7 @@ class BasicGame extends Phaser.Scene {
             },
             text:{
                 scores:{
+                    combo_smash:null,
                     team1: null,
                     team2: null
                 }
@@ -36,6 +37,9 @@ class BasicGame extends Phaser.Scene {
                 sound:null,
             },
             number_of_players: 2, 
+            scores:{
+                combo_smash:0
+            },
             players: [
                 {
                     image: null,
@@ -99,6 +103,14 @@ class BasicGame extends Phaser.Scene {
             fontSize: '32px', 
             fill: 'black' 
         });
+
+        //Combo smash
+        this.background.text.scores.combo_smash = this.add.text(350,20, "Combo smash: 0",{
+            fontSize:'20px',
+            fontFamily:'Arial',
+            fill:'green',
+            backgroundColor:"black"
+        });
     
         // Settings players
         this.actors.point.sound = this.sound.add("point");
@@ -143,18 +155,23 @@ class BasicGame extends Phaser.Scene {
         //Up and down movement
         this.actors.players[0].racket.setVelocityY(0);
         if(this.cursors.keyboard.up.isDown){
-            this.actors.players[0].racket.setVelocityY(-200);
+            this.actors.players[0].racket.setVelocityY(-500);
         }else if(this.cursors.keyboard.down.isDown){
-            this.actors.players[0].racket.setVelocityY(200);
+            this.actors.players[0].racket.setVelocityY(500);
         }
 
         //Player 2 movement
         this.actors.players[1].racket.setVelocityY(0);
         if(this.cursors.keyboard.w.isDown){
-            this.actors.players[1].racket.setVelocityY(-200);
+            this.actors.players[1].racket.setVelocityY(-500);
         }else if(this.cursors.keyboard.s.isDown){
-            this.actors.players[1].racket.setVelocityY(200);
+            this.actors.players[1].racket.setVelocityY(500);
         }
+
+        this.background.text.scores.combo_smash.setText(
+            "Combo smash: " + 
+            this.actors.scores.combo_smash
+        );
     }
 
     getRandomRacket(){
@@ -164,6 +181,7 @@ class BasicGame extends Phaser.Scene {
     handleBallCollision(racket, ball) {
         
         this.background.ball.sound.play();
+        this.actors.scores.combo_smash +=1;
 
         // Calculate the difference between the ball's Y position and the racket's Y position
         const diff = ball.y - racket.y;
@@ -186,6 +204,7 @@ class BasicGame extends Phaser.Scene {
         const initialPositionY = this.background.ball.initial.position.y;
         if (left || right) {
             this.actors.point.sound.play();
+            this.actors.scores.combo_smash = 0;
             // Update the score
             if (left) {
                 this.actors.players[1].score++;
@@ -198,8 +217,8 @@ class BasicGame extends Phaser.Scene {
             // Reset the ball to the center
             this.background.ball.image.setPosition(initialPositionX, initialPositionY);
             this.background.ball.image.setVelocity(
-                Phaser.Math.Between(-200, 200)* (left ? 1 : -1), 
-                Phaser.Math.Between(-200, 200)
+                Phaser.Math.Between(100, 200)* (left ? 1 : -1), 
+                Phaser.Math.Between(100, 200)* (left ? 1 : -1)
             );
         }
     }
