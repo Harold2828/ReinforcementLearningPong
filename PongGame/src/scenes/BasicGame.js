@@ -12,6 +12,7 @@ class BasicGame extends Phaser.Scene {
             },
             ball:{
                 image: null,
+                sound:null,
                 initial:{
                     position:{
                         x: 400,
@@ -31,6 +32,9 @@ class BasicGame extends Phaser.Scene {
             }
         };
         this.actors = {
+            point:{
+                sound:null,
+            },
             number_of_players: 2, 
             players: [
                 {
@@ -57,7 +61,11 @@ class BasicGame extends Phaser.Scene {
 
         this.load.image('court', 'assets/background/court.png');
         this.load.image('ball', 'assets/background/ball.png');
-        this.load.atlas('rackets', 'assets/player/rackets.png', 'assets/player/rackets.json');    }
+        this.load.atlas('rackets', 'assets/player/rackets.png', 'assets/player/rackets.json');    
+
+        this.load.audio('smash', 'assets/background/smash.wav');
+        this.load.audio('point', 'assets/background/point.mp3');
+    }
 
     create() {
     
@@ -71,6 +79,7 @@ class BasicGame extends Phaser.Scene {
         // Settings ball
         const initialPositionX = this.background.ball.initial.position.x;
         const initialPositionY = this.background.ball.initial.position.y;
+        this.background.ball.sound = this.sound.add("smash");
         this.background.ball.image = this.physics.add.image(initialPositionX, initialPositionY, 'ball');
         this.background.ball.image.setOrigin(0.5, 0.5);
         this.background.ball.image.setScale(0.1, 0.1);
@@ -92,6 +101,7 @@ class BasicGame extends Phaser.Scene {
         });
     
         // Settings players
+        this.actors.point.sound = this.sound.add("point");
         for(let countOfPlayers = 0; countOfPlayers < this.actors.number_of_players; countOfPlayers++){
             
             //Define the position of the players and the team
@@ -152,6 +162,9 @@ class BasicGame extends Phaser.Scene {
     }
 
     handleBallCollision(racket, ball) {
+        
+        this.background.ball.sound.play();
+
         // Calculate the difference between the ball's Y position and the racket's Y position
         const diff = ball.y - racket.y;
     
@@ -168,9 +181,11 @@ class BasicGame extends Phaser.Scene {
     }
 
     handleGoal(body, up, down, left, right) {
+
         const initialPositionX = this.background.ball.initial.position.x;
         const initialPositionY = this.background.ball.initial.position.y;
         if (left || right) {
+            this.actors.point.sound.play();
             // Update the score
             if (left) {
                 this.actors.players[1].score++;
