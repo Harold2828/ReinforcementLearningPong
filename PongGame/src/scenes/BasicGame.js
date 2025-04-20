@@ -16,6 +16,10 @@ class BasicGame extends Phaser.Scene {
                     position:{
                         x: 400,
                         y: 300
+                    },
+                    velocity:{
+                        x: 200,
+                        y: 200
                     }
                 }
             },
@@ -73,8 +77,8 @@ class BasicGame extends Phaser.Scene {
         this.background.ball.image.setCollideWorldBounds(true);
         this.background.ball.image.setBounce(1, 1);
         this.background.ball.image.setVelocity(
-            Phaser.Math.Between(-200, 200),
-            Phaser.Math.Between(-200, 200) 
+            this.background.ball.initial.velocity.x,
+            this.background.ball.initial.velocity.y
         );
 
         // Settings scores
@@ -103,6 +107,7 @@ class BasicGame extends Phaser.Scene {
             this.actors.players[countOfPlayers].racket.setScale(0.2, 0.2);
             this.actors.players[countOfPlayers].racket.setCollideWorldBounds(true);
             this.actors.players[countOfPlayers].racket.setImmovable(true);
+
             //Colliders
             this.physics.add.collider(
                 this.actors.players[countOfPlayers].racket, 
@@ -146,10 +151,20 @@ class BasicGame extends Phaser.Scene {
         return Phaser.Utils.Array.GetRandom(this.textures.get("rackets").getFrameNames());
     }
 
-    handleBallCollision(ball, racket){
-        const ballVelocity = ball.body.velocity;
-        ball.setVelocityX(ballVelocity.x * -1.3);
-        ball.setVelocityY(ballVelocity.y * -1.3);
+    handleBallCollision(racket, ball) {
+        // Calculate the difference between the ball's Y position and the racket's Y position
+        const diff = ball.y - racket.y;
+    
+        // Adjust the ball's velocity based on the collision point
+        ball.setVelocityY(diff * Phaser.Math.Between(5,10)); // Adjust multiplier for sensitivity
+    
+        // Optionally, increase the ball's speed slightly to make the game more dynamic
+        ball.setVelocityX(ball.body.velocity.x * Phaser.Math.Between(1,2));
+    
+        // Update the ball's angle based on its velocity
+        const angle = Math.atan2(ball.body.velocity.y, ball.body.velocity.x);
+        ball.setAngle(Phaser.Math.RadToDeg(angle));
+    
     }
 
     handleGoal(body, up, down, left, right) {
