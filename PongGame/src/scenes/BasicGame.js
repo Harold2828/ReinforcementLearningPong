@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { randomNormal } from '../utils/customRandom';
 
 class BasicGame extends Phaser.Scene {
 
@@ -189,10 +190,11 @@ class BasicGame extends Phaser.Scene {
         const diff = ball.y - racket.y;
     
         // Adjust the ball's velocity based on the collision point
-        ball.setVelocityY(diff * Phaser.Math.Between(5,10)); // Adjust multiplier for sensitivity
+        ball.setVelocityY(diff * randomNormal(3,1.5)); // Adjust multiplier for sensitivity
     
+
         // Optionally, increase the ball's speed slightly to make the game more dynamic
-        ball.setVelocityX(ball.body.velocity.x * Phaser.Math.Between(1,2));
+        ball.setVelocityX(ball.body.velocity.x * randomNormal(1.5,0.5));
     
         // Update the ball's angle based on its velocity
         const angle = Math.atan2(ball.body.velocity.y, ball.body.velocity.x);
