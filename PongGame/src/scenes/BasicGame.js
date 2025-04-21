@@ -96,18 +96,20 @@ class BasicGame extends Phaser.Scene {
 
         // Settings scores
         this.background.text.scores.team1 = this.add.text(100, 20, 'Team 1: 0', { 
-            fontSize: '32px', 
+            fontSize: '20px', 
+            fontFamily: "'Press Start 2P', 'Courier New', monospace",
             fill: 'black' 
         });
         this.background.text.scores.team2 = this.add.text(600, 20, 'Team 2: 0', { 
-            fontSize: '32px', 
+            fontSize: '20px', 
+            fontFamily: "'Press Start 2P', 'Courier New', monospace",
             fill: 'black' 
         });
 
         //Combo smash
-        this.background.text.scores.combo_smash = this.add.text(350,20, "Combo smash: 0",{
-            fontSize:'20px',
-            fontFamily:'Arial',
+        this.background.text.scores.combo_smash = this.add.text(300,20, "Combo smash: 0",{
+            fontSize:'15px',
+            fontFamily: "'Press Start 2P', 'Courier New', monospace",
             fill:'green',
             backgroundColor:"black"
         });
