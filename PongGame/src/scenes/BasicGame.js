@@ -190,11 +190,11 @@ class BasicGame extends Phaser.Scene {
         const diff = ball.y - racket.y;
     
         // Adjust the ball's velocity based on the collision point
-        ball.setVelocityY(diff * randomNormal(3,1.5)); // Adjust multiplier for sensitivity
+        ball.setVelocityY(diff * randomNormal(3.5,1.1)); // Adjust multiplier for sensitivity
     
 
         // Optionally, increase the ball's speed slightly to make the game more dynamic
-        ball.setVelocityX(ball.body.velocity.x * randomNormal(1.5,0.5));
+        ball.setVelocityX(ball.body.velocity.x * randomNormal(1.5,0.4));
     
         // Update the ball's angle based on its velocity
         const angle = Math.atan2(ball.body.velocity.y, ball.body.velocity.x);
@@ -221,8 +221,8 @@ class BasicGame extends Phaser.Scene {
             // Reset the ball to the center
             this.background.ball.image.setPosition(initialPositionX, initialPositionY);
             this.background.ball.image.setVelocity(
-                Phaser.Math.Between(100, 200)* (left ? 1 : -1), 
-                Phaser.Math.Between(100, 200)* (left ? 1 : -1)
+                randomNormal(175, 40)* (left ? 1 : -1), 
+                randomNormal(170, 25)* (left ? 1 : -1)
             );
         }
     }
