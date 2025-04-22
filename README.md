@@ -51,7 +51,3 @@ Feel free to fork the repo, open issues, or create pull requests.
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
-
----
-
-Let me know if you'd like help writing the WebSocket server logic or structuring the RL loop using PyTorch!
