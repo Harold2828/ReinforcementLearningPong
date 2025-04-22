@@ -1,0 +1,78 @@
+# Python-specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+env/
+venv/
+instance/
+*.egg-info
+build/
+dist/
+sdist/
+wheels/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Byte-compiled / optimized / DLL files (C extensions)
+*.so
+*.dylib
+
+# Virtual Environment
+.venv/
+
+# Spyder project settings
+.spyproject
+.ropeproject
+
+# Jupyter Notebook related files
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# PyCharm related files
+.idea/
+
+# Emacs and other editors
+*~
+\#*\#
+*.elc
+*.aux
+*.log
+*.toc
+*.fls
+*.fdb_latexmk
+*.blg
+*.bbl
+*.idx
+*.out
+*.synctex.gz
+*.thm
+
+# OS or Editor-specific files (adjust as needed)
+.DS_Store
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+
+# Database files (if you're not committing your database)
+*.sqlite
+*.db
+
+# Uploaded files or media (if you don't want to track them)
+uploads/
+media/
+
+# Configuration files that might contain sensitive information
+*.ini
+*.cfg
+.env
+
+# Temporary files and directories
+tmp/
+temp/

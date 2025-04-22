@@ -1,0 +1,5 @@
+Flask
+Flask-SocketIO
+torch
+torchvision
+torchaudio
