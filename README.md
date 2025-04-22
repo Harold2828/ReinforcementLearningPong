@@ -13,3 +13,7 @@ This project is inspired by the iconic **Pong** game. It has been adapted as a s
 The goal is to create an AI agent capable of learning to play Pong using trial-and-error, rewards, and intelligent decision-making.
 
 ---
+
+## Server side
+
+I'm using Flask with the version 3.1.0 with Python 3.12.2
