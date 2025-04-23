@@ -3,3 +3,4 @@ Flask-SocketIO
 torch
 torchvision
 torchaudio
+eventlet

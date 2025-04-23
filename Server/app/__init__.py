@@ -1,8 +1,11 @@
 from flask import Flask
 from flask_socketio import SocketIO
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'ass'  # Remember to change this
+socketio = SocketIO(cors_allowed_origins="*")
 
-# Initialize Flask-SocketIO and associate it with the app instance
-socketio = SocketIO(app, cors_allowed_origins="*")
+def create_app():
+    app = Flask(__name__)
+    socketio.init_app(app)
+    from .sockets import register_sockets
+    register_sockets(socketio)
+    return app
