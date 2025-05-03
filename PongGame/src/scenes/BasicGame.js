@@ -80,19 +80,6 @@ class BasicGame extends Phaser.Scene {
     
         /****AI INTEGRATION****/
         this.socketManager = new SocketManager("http://127.0.0.1:5001");
-        this.input.keyboard.on(
-            "keydown-LEFT",
-            ()=>{
-                this.socketManager.sendPlayerMove("left");
-            }
-        );
-        this.input.keyboard.on(
-            "keydown-RIGHT",
-            ()=>{
-                this.socketManager.sendPlayerMove("right");
-            }
-        );
-
 
         /****SETTINGS****/
 
@@ -175,14 +162,12 @@ class BasicGame extends Phaser.Scene {
     update(){
         this.socketManager.getMachineMove()
         .then((data) => {
-            console.log("Some");
+
             if(data.direction == "up"){
                 this.actors.players[0].racket.setVelocityY(-500);
             }else if(data.direction == "down"){
                 this.actors.players[0].racket.setVelocityY(500);
             }
-            console.log(data);
-
         })
         .catch((error) => {
             console.error("Error:", error);
