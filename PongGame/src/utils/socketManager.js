@@ -22,9 +22,9 @@ class SocketManager{
         );
     }
 
-    sendPlayerMove(direction){
+    sendPlayerMove(environment){
         if(this.socket){
-            this.socket.emit("player_action",{direction})
+            this.socket.emit("player_action", environment);
         }
     }
 

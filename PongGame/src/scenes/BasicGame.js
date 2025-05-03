@@ -146,7 +146,6 @@ class BasicGame extends Phaser.Scene {
                 xCoordinates = 700; //In case of even number of players, the player is on the left side
                 this.actors.players[countOfPlayers].team = "team2";
             }
-            this.actors.players[countOfPlayers].team =
             this.actors.players[countOfPlayers].racket = this.physics.add.image(xCoordinates, 300, 'rackets', this.getRandomRacket());
             this.actors.players[countOfPlayers].racket.setOrigin(0.5, 0.5);
             this.actors.players[countOfPlayers].racket.setScale(0.2, 0.2);
@@ -185,11 +184,30 @@ class BasicGame extends Phaser.Scene {
 
         //Player 2 movement
         this.actors.players[1].racket.setVelocityY(0);
+        let environment = {
+            myself:{
+                combo_smash:this.actors.scores.combo_smash,
+                score:this.actors.players[0].score
+            },
+            player:{
+                action: "",
+                x:this.actors.players[1].racket.x,
+                y:this.actors.players[1].racket.y,
+                score:this.actors.players[1].score
+            },
+            ball:{
+                x: this.background.ball.image.x,
+                y: this.background.ball.image.y
+            }
+        };
+
         if(this.cursors.keyboard.w.isDown){
-            this.socketManager.sendPlayerMove("up");
+            environment.player.action = "up";
+            this.socketManager.sendPlayerMove(environment);
             this.actors.players[1].racket.setVelocityY(-500);
         }else if(this.cursors.keyboard.s.isDown){
-            this.socketManager.sendPlayerMove("down");
+            environment.player.action = "down";
+            this.socketManager.sendPlayerMove(environment);
             this.actors.players[1].racket.setVelocityY(500);
         }
 
