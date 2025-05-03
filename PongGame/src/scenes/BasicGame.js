@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import SocketManager from '../utils/socketManager';
 import { randomNormal } from '../utils/customRandom';
 
 class BasicGame extends Phaser.Scene {
@@ -7,6 +8,7 @@ class BasicGame extends Phaser.Scene {
     
         super({ key: 'BasicGame' });
 
+        //Mechanics
         this.background = {
             court:{
                 image: null
@@ -56,10 +58,12 @@ class BasicGame extends Phaser.Scene {
                 }
             ]
         }
-
         this.cursors = {
             keyboard: null,
         };
+
+        //Socket manager
+        this.socketManager = null;
     }
 
     preload(){
@@ -74,6 +78,22 @@ class BasicGame extends Phaser.Scene {
 
     create() {
     
+        /****AI INTEGRATION****/
+        this.socketManager = new SocketManager("http://127.0.0.1:5001");
+        this.input.keyboard.on(
+            "keydown-LEFT",
+            ()=>{
+                this.socketManager.sendPlayerMove("left");
+            }
+        );
+        this.input.keyboard.on(
+            "keydown-RIGHT",
+            ()=>{
+                this.socketManager.sendPlayerMove("right");
+            }
+        );
+
+
         /****SETTINGS****/
 
         // Settings court
@@ -166,8 +186,10 @@ class BasicGame extends Phaser.Scene {
         //Player 2 movement
         this.actors.players[1].racket.setVelocityY(0);
         if(this.cursors.keyboard.w.isDown){
+            this.socketManager.sendPlayerMove("up");
             this.actors.players[1].racket.setVelocityY(-500);
         }else if(this.cursors.keyboard.s.isDown){
+            this.socketManager.sendPlayerMove("down");
             this.actors.players[1].racket.setVelocityY(500);
         }
 
@@ -212,10 +234,22 @@ class BasicGame extends Phaser.Scene {
             // Update the score
             if (left) {
                 this.actors.players[1].score++;
-                this.background.text.scores.team2.setText(`Team 2: ${this.actors.players[1].score}`);
+                this.background.text.scores.team2.setText(
+                    `Team 2: ${this.actors.players[1].score}`,{
+                        fontSize: '20px', 
+                        fontFamily: "'Press Start 2P', 'Courier New', monospace",
+                        fill: 'black' 
+                    }
+                );
             } else if (right) {
                 this.actors.players[0].score++;
-                this.background.text.scores.team1.setText(`Team 1: ${this.actors.players[0].score}`);
+                this.background.text.scores.team1.setText(
+                    `Team 1: ${this.actors.players[0].score}`,{
+                        fontSize: '20px', 
+                        fontFamily: "'Press Start 2P', 'Courier New', monospace",
+                        fill: 'black' 
+                    }
+                );
             }
     
             // Reset the ball to the center
