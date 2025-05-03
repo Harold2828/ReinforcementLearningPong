@@ -173,6 +173,20 @@ class BasicGame extends Phaser.Scene {
     }
 
     update(){
+        this.socketManager.getMachineMove()
+        .then((data) => {
+            console.log("Some");
+            if(data.direction == "up"){
+                this.actors.players[0].racket.setVelocityY(-500);
+            }else if(data.direction == "down"){
+                this.actors.players[0].racket.setVelocityY(500);
+            }
+            console.log(data);
+
+        })
+        .catch((error) => {
+            console.error("Error:", error);
+        });
 
         //Up and down movement
         this.actors.players[0].racket.setVelocityY(0);

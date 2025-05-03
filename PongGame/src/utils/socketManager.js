@@ -14,18 +14,25 @@ class SocketManager{
             }
         );
 
-        this.socket.on(
-            "ai_move",
-            (data)=>{
-                console.debug(`The AI decision is \n${data}`)
-            }
-        );
+
     }
 
     sendPlayerMove(environment){
         if(this.socket){
             this.socket.emit("player_action", environment);
         }
+    }
+
+    getMachineMove(){
+        return new Promise((resolve, reject) => {
+            if (this.socket) {
+                this.socket.on("ai_move", (data) => {
+                    resolve(data);
+                });
+            } else {
+                reject(new Error("Socket is not connected"));
+            }
+        });
     }
 
     on(event, callback){

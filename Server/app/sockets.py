@@ -11,7 +11,7 @@ def register_sockets(socketio):
         print(f"📥 Player sent: {data}")
         
         # Simulate AI response — later replaced by PyTorch
-        ai_direction = random.choice(['left', 'right', 'stay'])
+        ai_direction = random.choice(['up', 'down', 'stay'])
 
         # Send it back to client
         emit('ai_move', {'direction': ai_direction})
