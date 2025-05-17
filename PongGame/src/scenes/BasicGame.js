@@ -104,12 +104,12 @@ class BasicGame extends Phaser.Scene {
 
         // Settings scores
         this.background.text.scores.team1 = this.add.text(100, 20, 'Team 1: 0', { 
-            fontSize: '20px', 
+            fontSize: '10px', 
             fontFamily: "'Press Start 2P', 'Courier New', monospace",
             fill: 'black' 
         });
         this.background.text.scores.team2 = this.add.text(600, 20, 'Team 2: 0', { 
-            fontSize: '20px', 
+            fontSize: '10px', 
             fontFamily: "'Press Start 2P', 'Courier New', monospace",
             fill: 'black' 
         });
@@ -255,7 +255,7 @@ class BasicGame extends Phaser.Scene {
                 this.actors.players[1].score++;
                 this.background.text.scores.team2.setText(
                     `Team 2: ${this.actors.players[1].score}`,{
-                        fontSize: '20px', 
+                        fontSize: '10px', 
                         fontFamily: "'Press Start 2P', 'Courier New', monospace",
                         fill: 'black' 
                     }
@@ -264,7 +264,7 @@ class BasicGame extends Phaser.Scene {
                 this.actors.players[0].score++;
                 this.background.text.scores.team1.setText(
                     `Team 1: ${this.actors.players[0].score}`,{
-                        fontSize: '20px', 
+                        fontSize: '10px', 
                         fontFamily: "'Press Start 2P', 'Courier New', monospace",
                         fill: 'black' 
                     }
