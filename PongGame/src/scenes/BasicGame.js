@@ -189,7 +189,7 @@ class BasicGame extends Phaser.Scene {
                 score:this.actors.players[0].score
             },
             player:{
-                action: "",
+                action: "stay",
                 x:this.actors.players[1].racket.x,
                 y:this.actors.players[1].racket.y,
                 score:this.actors.players[1].score
@@ -208,6 +208,8 @@ class BasicGame extends Phaser.Scene {
             environment.player.action = "down";
             this.socketManager.sendPlayerMove(environment);
             this.actors.players[1].racket.setVelocityY(500);
+        }else{
+            this.socketManager.sendPlayerMove(environment);
         }
 
         this.background.text.scores.combo_smash.setText(
