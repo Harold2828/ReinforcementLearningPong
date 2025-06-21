@@ -76,3 +76,6 @@ media/
 # Temporary files and directories
 tmp/
 temp/
+
+# For the server
+server_env
