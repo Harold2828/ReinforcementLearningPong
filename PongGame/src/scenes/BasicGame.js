@@ -64,6 +64,9 @@ class BasicGame extends Phaser.Scene {
 
         //Socket manager
         this.socketManager = null;
+
+        this.lastScoredBy = null;   // 'myself' | 'player' | null
+        this.ballWasHit  = false;   // true if ball hit a racket since last tick
     }
 
     preload(){
@@ -77,6 +80,10 @@ class BasicGame extends Phaser.Scene {
     }
 
     create() {
+
+        let { width, height } = this.sys.game.canvas;
+        this.width = width;
+        this.height = height;
     
         /****AI INTEGRATION****/
         this.socketManager = new SocketManager("http://127.0.0.1:5001");
@@ -184,33 +191,50 @@ class BasicGame extends Phaser.Scene {
         //Player 2 movement
         this.actors.players[1].racket.setVelocityY(0);
         let environment = {
-            myself:{
-                combo_smash:this.actors.scores.combo_smash,
-                score:this.actors.players[0].score
+            combo_smash: this.actors.scores.combo_smash,
+            width: this.width,
+            height: this.height,
+            myself: {
+                scored: this.lastScoredBy === 'myself',   // dynamic
+                score: this.actors.players[0].score,
+                position: {
+                    x: this.actors.players[0].racket.x,
+                    y: this.actors.players[0].racket.y
+                }
             },
-            player:{
-                action: "stay",
-                x:this.actors.players[1].racket.x,
-                y:this.actors.players[1].racket.y,
-                score:this.actors.players[1].score
+            player: {
+                scored: this.lastScoredBy === 'player',   // dynamic
+                score: this.actors.players[1].score,
+                position: {
+                    x: this.actors.players[1].racket.x,
+                    y: this.actors.players[1].racket.y
+                }
             },
-            ball:{
-                x: this.background.ball.image.x,
-                y: this.background.ball.image.y
+            ball: {
+                hit: this.ballWasHit,                     // dynamic
+                position: {
+                    x: this.background.ball.image.x,
+                    y: this.background.ball.image.y
+                }
             }
         };
 
-        if(this.cursors.keyboard.w.isDown){
+        if (this.cursors.keyboard.w.isDown) {
             environment.player.action = "up";
             this.socketManager.sendPlayerMove(environment);
             this.actors.players[1].racket.setVelocityY(-500);
-        }else if(this.cursors.keyboard.s.isDown){
+        } else if (this.cursors.keyboard.s.isDown) {
             environment.player.action = "down";
             this.socketManager.sendPlayerMove(environment);
             this.actors.players[1].racket.setVelocityY(500);
-        }else{
+        } else {
             this.socketManager.sendPlayerMove(environment);
         }
+
+        // Reset event flags after sending
+        this.lastScoredBy = null;
+        this.ballWasHit = false;
+
 
         this.background.text.scores.combo_smash.setText(
             "Combo smash: " + 
@@ -223,62 +247,49 @@ class BasicGame extends Phaser.Scene {
     }
 
     handleBallCollision(racket, ball) {
-        
         this.background.ball.sound.play();
-        this.actors.scores.combo_smash +=1;
+        this.actors.scores.combo_smash += 1;
 
-        // Calculate the difference between the ball's Y position and the racket's Y position
+        // Mark that the ball was hit
+        this.ballWasHit = true;
+
         const diff = ball.y - racket.y;
-    
-        // Adjust the ball's velocity based on the collision point
-        ball.setVelocityY(diff * randomNormal(3.5,1.1)); // Adjust multiplier for sensitivity
-    
+        ball.setVelocityY(diff * randomNormal(3.5, 1.1));
+        ball.setVelocityX(ball.body.velocity.x * randomNormal(1.5, 0.4));
 
-        // Optionally, increase the ball's speed slightly to make the game more dynamic
-        ball.setVelocityX(ball.body.velocity.x * randomNormal(1.5,0.4));
-    
-        // Update the ball's angle based on its velocity
         const angle = Math.atan2(ball.body.velocity.y, ball.body.velocity.x);
         ball.setAngle(Phaser.Math.RadToDeg(angle));
-    
     }
 
-    handleGoal(body, up, down, left, right) {
 
+    handleGoal(body, up, down, left, right) {
         const initialPositionX = this.background.ball.initial.position.x;
         const initialPositionY = this.background.ball.initial.position.y;
+
         if (left || right) {
             this.actors.point.sound.play();
             this.actors.scores.combo_smash = 0;
-            // Update the score
+
+            // left world bound → Team 2 scores (player[1])
+            // right world bound → Team 1 scores (player[0])
             if (left) {
                 this.actors.players[1].score++;
-                this.background.text.scores.team2.setText(
-                    `Team 2: ${this.actors.players[1].score}`,{
-                        fontSize: '10px', 
-                        fontFamily: "'Press Start 2P', 'Courier New', monospace",
-                        fill: 'black' 
-                    }
-                );
+                this.lastScoredBy = 'player';   // human / second racket
+                this.background.text.scores.team2.setText(`Team 2: ${this.actors.players[1].score}`);
             } else if (right) {
                 this.actors.players[0].score++;
-                this.background.text.scores.team1.setText(
-                    `Team 1: ${this.actors.players[0].score}`,{
-                        fontSize: '10px', 
-                        fontFamily: "'Press Start 2P', 'Courier New', monospace",
-                        fill: 'black' 
-                    }
-                );
+                this.lastScoredBy = 'myself';   // AI / first racket
+                this.background.text.scores.team1.setText(`Team 1: ${this.actors.players[0].score}`);
             }
-    
-            // Reset the ball to the center
+
             this.background.ball.image.setPosition(initialPositionX, initialPositionY);
             this.background.ball.image.setVelocity(
-                randomNormal(175, 40)* (left ? 1 : -1), 
-                randomNormal(170, 25)* (left ? 1 : -1)
+                randomNormal(175, 40) * (left ? 1 : -1),
+                randomNormal(170, 25) * (left ? 1 : -1)
             );
         }
     }
+
 }
 
 export default BasicGame;
