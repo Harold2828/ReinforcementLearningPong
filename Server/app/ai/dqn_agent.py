@@ -224,3 +224,10 @@ class DQNAgent:
         # Update target network periodically
         if self.total_steps % self.target_update_interval == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
+
+    def save(self, path: str):
+        torch.save(self.policy_net.state_dict(), path)
+
+    def load(self, path: str):
+        self.policy_net.load_state_dict(torch.load(path, map_location=self.device))
+        self.policy_net.eval()
