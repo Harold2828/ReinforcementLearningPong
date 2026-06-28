@@ -92,6 +92,19 @@ def test_q_value_update_uses_q_learning_formula():
     assert updatedQValue == 2.9
 
 
+def test_terminal_q_value_update_does_not_bootstrap_future_value():
+    agent = QLearningAgent(
+        QLearningConfiguration(learningRate=0.5, discountFactor=0.9),
+        randomGenerator=random.Random(1),
+    )
+    agent.qTable["current"] = {"UP": 1.0, "DOWN": 0.0, "STAY": 0.0}
+    agent.qTable["terminal"] = {"UP": 20.0, "DOWN": 10.0, "STAY": 0.0}
+
+    updatedQValue = agent.update_q_value("current", "UP", 3.0, "terminal", terminal=True)
+
+    assert updatedQValue == 2.0
+
+
 def test_epsilon_greedy_selects_valid_actions_and_exploits_best_known_action():
     state = make_state()
     agent = QLearningAgent(

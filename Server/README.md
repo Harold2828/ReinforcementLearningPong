@@ -8,7 +8,7 @@ The backend exposes a Flask-SocketIO service for the Pong game and hosts two ind
 - Validate the multi-agent game mode and state payload.
 - Select valid actions for both sides: `UP`, `DOWN`, or `STAY`.
 - Apply Q-learning updates with epsilon-greedy exploration during `TRAINING_SELF_PLAY`.
-- Calculate adversarial rewards for scoring, hits, alignment, pressure, and survival.
+- Calculate adversarial rewards for scoring, hits, combo-smash rallies, incoming-ball alignment, pressure, and survival.
 - Save and load separate Q-table progress from `models/agent_q_learning_model.json` and `models/opponent_q_learning_model.json`.
 - Emit training status, state errors, dual action responses, and self-play metrics.
 

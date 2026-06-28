@@ -41,6 +41,7 @@ describe("gameState helpers", () => {
             episodeId: "episode-1",
             previousAgentDistanceToBall: 10,
             previousOpponentDistanceToBall: 12,
+            comboSmash: 7,
         });
 
         expect(state).toMatchObject({
@@ -54,6 +55,7 @@ describe("gameState helpers", () => {
             agentScore: 2,
             opponentScore: 1,
             lastHitBy: "agent",
+            comboSmash: 7,
         });
     });
 

@@ -37,7 +37,7 @@ The frontend sends `state_update` WebSocket messages with these required fields:
 | `agentScore` | number | Right/main agent score. |
 | `opponentScore` | number | Left/opponent score. |
 
-Optional fields include `lastHitBy`, `pointWinner`, `episodeId`, `previousAgentDistanceToBall`, `previousOpponentDistanceToBall`, `width`, and `height`.
+Optional fields include `lastHitBy`, `pointWinner`, `episodeId`, `previousAgentDistanceToBall`, `previousOpponentDistanceToBall`, `comboSmash`, `width`, and `height`.
 
 The backend returns `agentAction` and `opponentAction` in `ai_move`. Each action is `UP`, `DOWN`, or `STAY`. Invalid frontend payloads are rejected through `state_error`.
 
@@ -49,12 +49,12 @@ The adversarial Q-learning reward function uses:
 |---|---:|---:|
 | Agent scores point | `+5.0` | `-5.0` |
 | Opponent scores point | `-5.0` | `+5.0` |
-| Agent hits ball | positive | small negative |
-| Opponent hits ball | small negative | positive |
-| Paddle moves closer to ball | positive alignment reward | positive alignment reward |
+| Agent hits ball | `+1.0 + min(comboSmash * 0.02, 0.5)` | small negative |
+| Opponent hits ball | small negative | `+1.0 + min(comboSmash * 0.02, 0.5)` |
+| Paddle moves closer to incoming ball | positive alignment reward | positive alignment reward |
 | Episode survives one step | small survival reward | small survival reward |
 
-Metrics tracked per completed episode include agent/opponent win rate, average reward, hit rate, self-play episodes, and epsilon values.
+Terminal point updates do not bootstrap from the next state, and self-play episodes decay epsilon after the point is completed. Metrics tracked per completed episode include agent/opponent win rate, average reward, hit rate, self-play episodes, and epsilon values.
 
 ## Run Locally
 

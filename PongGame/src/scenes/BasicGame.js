@@ -259,6 +259,7 @@ class BasicGame extends Phaser.Scene {
             episodeId: this.currentEpisode,
             previousAgentDistanceToBall: this.previousAgentDistanceToBall,
             previousOpponentDistanceToBall: this.previousOpponentDistanceToBall,
+            comboSmash: this.actors.scores.comboSmash,
         });
 
         const stateWasSent = this.socketManager.sendStateUpdate(environmentState);

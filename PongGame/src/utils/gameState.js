@@ -59,6 +59,7 @@ export function buildQlearningState({
     episodeId,
     previousAgentDistanceToBall,
     previousOpponentDistanceToBall,
+    comboSmash = 0,
 }) {
     return {
         gameMode,
@@ -75,6 +76,7 @@ export function buildQlearningState({
         episodeId,
         previousAgentDistanceToBall,
         previousOpponentDistanceToBall,
+        comboSmash,
         width,
         height,
     };

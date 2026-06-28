@@ -41,6 +41,7 @@ class MultiAgentGameState:
     episodeId: str | int | None = None
     previousAgentDistanceToBall: float | None = None
     previousOpponentDistanceToBall: float | None = None
+    comboSmash: int = 0
 
     @property
     def done(self) -> bool:
@@ -145,6 +146,7 @@ def validate_multi_agent_state(payload: dict[str, Any]) -> MultiAgentGameState:
         episodeId=payload.get("episodeId"),
         previousAgentDistanceToBall=_optional_finite_number(payload, "previousAgentDistanceToBall"),
         previousOpponentDistanceToBall=_optional_finite_number(payload, "previousOpponentDistanceToBall"),
+        comboSmash=_optional_non_negative_integer(payload, "comboSmash"),
     )
 
 
@@ -160,15 +162,15 @@ def calculate_adversarial_rewards(state: MultiAgentGameState) -> tuple[float, fl
         opponentReward += 5.0
 
     if state.lastHitBy == "agent":
-        agentReward += 1.0
+        agentReward += _hit_reward(state.comboSmash)
         opponentReward -= 0.05
     elif state.lastHitBy == "opponent":
         agentReward -= 0.05
-        opponentReward += 1.0
+        opponentReward += _hit_reward(state.comboSmash)
 
-    if state.previousAgentDistanceToBall is not None:
+    if state.previousAgentDistanceToBall is not None and state.ballVelocityX > 0:
         agentReward += _alignment_reward(abs(state.ballY - state.agentPaddleY), state.previousAgentDistanceToBall)
-    if state.previousOpponentDistanceToBall is not None:
+    if state.previousOpponentDistanceToBall is not None and state.ballVelocityX < 0:
         opponentReward += _alignment_reward(abs(state.ballY - state.opponentPaddleY), state.previousOpponentDistanceToBall)
 
     return agentReward, opponentReward
@@ -232,6 +234,7 @@ class MultiAgentTrainingService:
         if state.done:
             self.metrics.record_step(state, agentReward, opponentReward)
             if learningEnabled:
+                self._finish_training_episode()
                 self.save_models()
             self.reset_episode()
         else:
@@ -294,7 +297,7 @@ class MultiAgentTrainingService:
         previousAction = self._agentPreviousAction if role == "agent" else self._opponentPreviousAction
 
         if learningEnabled and previousStateKey and previousAction:
-            qLearningAgent.update_q_value(previousStateKey, previousAction, rewardValue, stateKey)
+            qLearningAgent.update_q_value(previousStateKey, previousAction, rewardValue, stateKey, terminal=state.done)
 
         originalTrainingState = qLearningAgent.trainingEnabled
         qLearningAgent.trainingEnabled = explorationEnabled
@@ -309,6 +312,16 @@ class MultiAgentTrainingService:
             self._opponentPreviousAction = selectedAction
 
         return selectedAction if selectedAction in ALLOWED_ACTIONS else "STAY"
+
+    def _finish_training_episode(self) -> None:
+        self.agentPlayer.epsilonValue = max(
+            self.agentPlayer.configuration.epsilonMin,
+            self.agentPlayer.epsilonValue * self.agentPlayer.configuration.epsilonDecay,
+        )
+        self.opponentAgent.epsilonValue = max(
+            self.opponentAgent.configuration.epsilonMin,
+            self.opponentAgent.epsilonValue * self.opponentAgent.configuration.epsilonDecay,
+        )
 
     @staticmethod
     def _is_agent_ai_controlled(gameMode: str) -> bool:
@@ -363,6 +376,10 @@ def _alignment_reward(currentDistance: float, previousDistance: float) -> float:
     return 0.0
 
 
+def _hit_reward(comboSmash: int) -> float:
+    return 1.0 + min(comboSmash * 0.02, 0.5)
+
+
 def _require_finite_number(payload: dict[str, Any], fieldName: str) -> float:
     if fieldName not in payload:
         raise ValueError(f"Missing required state field: {fieldName}")
@@ -390,3 +407,9 @@ def _require_non_negative_integer(payload: dict[str, Any], fieldName: str) -> in
     if value < 0 or int(value) != value:
         raise ValueError(f"State field {fieldName} must be a non-negative integer.")
     return int(value)
+
+
+def _optional_non_negative_integer(payload: dict[str, Any], fieldName: str) -> int:
+    if fieldName not in payload or payload[fieldName] is None:
+        return 0
+    return _require_non_negative_integer(payload, fieldName)

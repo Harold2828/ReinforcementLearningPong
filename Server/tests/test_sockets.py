@@ -14,6 +14,7 @@ def valid_state_payload():
         "opponentScore": 0,
         "lastHitBy": None,
         "pointWinner": None,
+        "comboSmash": 0,
         "width": 800,
         "height": 600,
     }

@@ -238,6 +238,7 @@ class QLearningAgent:
                 selectedAction=self.previousAction,
                 rewardValue=rewardValue,
                 nextStateKey=currentStateKey,
+                terminal=currentState.done,
             )
 
         selectedAction = self.select_action(currentState)
@@ -253,11 +254,12 @@ class QLearningAgent:
         selectedAction: str,
         rewardValue: float,
         nextStateKey: str,
+        terminal: bool = False,
     ) -> float:
         self._ensure_state_actions(currentStateKey)
         self._ensure_state_actions(nextStateKey)
         currentQValue = self.qTable[currentStateKey][selectedAction]
-        nextBestQValue = max(self.qTable[nextStateKey].values())
+        nextBestQValue = 0.0 if terminal else max(self.qTable[nextStateKey].values())
         updatedQValue = currentQValue + self.configuration.learningRate * (
             rewardValue + self.configuration.discountFactor * nextBestQValue - currentQValue
         )
