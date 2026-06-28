@@ -1,76 +1,140 @@
-/* General Reset */
 * {
+    box-sizing: border-box;
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
-  }
-  
-  body {
-    font-family: 'Arial', sans-serif;
-    line-height: 1.6;
-    background-color: #f4f4f9;
-    color: #333;
+}
+
+body {
+    min-width: 320px;
+    min-height: 100vh;
+    background: #15171a;
+    color: #f4f7fb;
+    font-family: Arial, sans-serif;
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
-  }
-  
-  /* Header */
-  header {
-    background-color: #d89c77;
-    color: white;
+}
+
+header {
+    background: #22272e;
+    border-bottom: 3px solid #47d18c;
     padding: 1rem 2rem;
     text-align: center;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-  }
-  
-  header .logo img {
-    max-width: 50px;
-    vertical-align: middle;
-    margin-right: 10px;
-  }
-  
-  header h1 {
-    font-size: 2rem;
-    margin-top: 0.5rem;
-  }
-  
-  /* Main Content */
-  main {
-    flex: 1;
+}
+
+header h1 {
+    font-family: "Press Start 2P", "Courier New", monospace;
+    font-size: clamp(1rem, 2vw, 1.6rem);
+    line-height: 1.5;
+}
+
+main {
+    width: min(1180px, 100%);
+    margin: 0 auto;
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.training-panel {
+    background: #20262d;
+    border: 1px solid #3a444f;
+    border-radius: 8px;
+    padding: 1rem;
+    display: grid;
+    gap: 1rem;
+}
+
+.status-row,
+.metrics-grid > div {
     display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 2rem;
-  }
-  
-  #game-container {
-    width: 80%;
-    height: 700px;
-    background-color: #fff;
-    border: 2px solid #ddd;
-    border-radius: 10px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 1.2rem;
-    color: #666;
-  }
-  
-  /* Footer */
-  footer {
-    background-color: #333;
-    color: white;
-    text-align: center;
-    padding: 1rem 0;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.status-row span,
+.metrics-grid span {
+    color: #aab6c3;
+    font-size: 0.85rem;
+}
+
+.status-row strong,
+.metrics-grid strong {
+    color: #f4f7fb;
     font-size: 0.9rem;
-  }
-  
-  footer p {
-    margin: 0.5rem 0;
-  }
-  
-  footer strong {
-    color: #4caf50;
-  }
+    text-align: right;
+}
+
+[data-ui="connection-status"] {
+    color: #ff7a7a;
+}
+
+[data-ui="connection-status"].is-connected {
+    color: #47d18c;
+}
+
+.metrics-grid {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.control-row {
+    display: grid;
+    gap: 0.6rem;
+}
+
+button {
+    border: 1px solid #5f6d7a;
+    border-radius: 6px;
+    background: #2f80ed;
+    color: white;
+    cursor: pointer;
+    font: inherit;
+    min-height: 2.4rem;
+    padding: 0.55rem 0.75rem;
+}
+
+button:hover:not(:disabled) {
+    background: #1f6fda;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+#game-container {
+    width: 100%;
+    min-height: 640px;
+    background: #f4f7fb;
+    border: 2px solid #3a444f;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+footer {
+    margin-top: auto;
+    background: #22272e;
+    color: #d7dde5;
+    text-align: center;
+    padding: 0.8rem;
+    font-size: 0.85rem;
+}
+
+footer strong {
+    color: #47d18c;
+}
+
+@media (max-width: 900px) {
+    main {
+        grid-template-columns: 1fr;
+    }
+
+    #game-container {
+        min-height: 460px;
+    }
+}

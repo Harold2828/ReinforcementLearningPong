@@ -1,0 +1,9 @@
+.git
+.DS_Store
+node_modules
+__pycache__
+.pytest_cache
+*.pyc
+dist
+server_env
+models/q_learning_model.json

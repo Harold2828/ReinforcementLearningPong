@@ -1,130 +1,69 @@
-# Server-Side Module
+# Backend Server
 
-## Overview  
-This module handles all server-side communication and hosts the AI model that interacts with the game environment. It processes incoming game data, performs reinforcement learning updates, and sends real-time actions back to the game through WebSockets.
+The backend exposes a Flask-SocketIO service for the Pong game and hosts the tabular Q-learning agent.
 
-### Key Features  
-- **Data Processing:** Normalizes, structures, and prepares incoming state information before passing it to the AI agent.  
-- **WebSocket Integration:** Provides real-time, two-way communication between the game engine and the AI model.  
-- **Model Updates:** Supports dynamic learning and model updates for adaptive, improving agent behavior.  
-- **Error Handling:** Includes logging, exception control, and fail-safe mechanisms to ensure stable operation.  
+## Responsibilities
 
-![Monitoring Screenshot](assets/screenshots/monitoring.png)
+- Validate game state payloads from the PhaserJS frontend.
+- Select valid actions: `UP`, `DOWN`, or `STAY`.
+- Apply Q-learning updates with epsilon-greedy exploration.
+- Calculate rewards for hits, misses, scoring, alignment, and survival.
+- Save and load Q-table progress from `models/q_learning_model.json`.
+- Emit training status, state errors, action responses, and episode metrics.
 
-## Technologies  
-This system uses **Flask** combined with **Flask-SocketIO** to handle real-time communication and AI inference.
+## WebSocket Events
 
-### Dependencies  
-Make sure you have the following installed:  
-- Python 3.x  
-- Flask  
-- Flask-SocketIO  
-- PyTorch  
+| Event | Direction | Purpose |
+|---|---|---|
+| `state_update` | Frontend to backend | Sends the current Pong state. |
+| `ai_move` | Backend to frontend | Returns action, reward, episode, epsilon, and metrics. |
+| `state_error` | Backend to frontend | Reports invalid payloads. |
+| `start_training` | Frontend to backend | Enables Q-learning updates. |
+| `stop_training` | Frontend to backend | Disables Q-learning updates and saves the model. |
+| `reset_episode` | Frontend to backend | Clears the current episode tracker. |
+| `training_status` | Backend to frontend | Reports mode, episode, epsilon, and metrics. |
 
-## How to Run  
+## Run
 
-1. **Activate the virtual environment:**  
-```bash
-source server_env/bin/activate
-```
-
-2. **Install dependencies:**  
 ```bash
 pip install -r requirements.txt
-```
-
-3. **Start the server:**  
-```bash
 python run.py
 ```
 
-4. **Verify the connection:**  
-Open the game or a WebSocket client and confirm that the server is sending and receiving events correctly.
+The server listens on `http://localhost:5001`.
 
----
+## Tests
 
-# Mathematical Background
-
-## Context  
-The game `PongGame` sends the following JSON structure to the server:
-
-```json
-{
-  "combo_smash": 0,
-  "width": 800,
-  "height": 600,
-  "myself": {
-    "score": 0,
-    "position": { "x": 700, "y": 308.2 }
-  },
-  "player": {
-    "score": 0,
-    "position": { "x": 100, "y": 300 }
-  },
-  "ball": {
-    "position": { "x": 406.5, "y": 306.5 }
-  }
-}
+```bash
+pytest tests
 ```
 
-From this, we construct the state vector **s**, which currently includes the following 11 features:
+From the repository root:
 
-```text
-[
-  combo_smash,
-  my_score,
-  my_x,
-  my_y,
-  player_score,
-  player_x,
-  player_y,
-  ball_x,
-  ball_y,
-  relative_ball_position_y (ball.y - myself.y),
-  relative_ball_position_x (ball.x - myself.x)
-]
+```bash
+pytest Server/tests
 ```
 
-### Actions  
-The agent can choose from three possible actions:
+## Docker
 
-```
-[
-  up,
-  down,
-  stay
-]
+From the repository root:
+
+```bash
+docker compose up --build backend
 ```
 
----
+## Configuration
 
-# Reward Function Fundamentals  
+| Variable | Description |
+|---|---|
+| `MODEL_SAVE_PATH` | Q-table save/load path relative to `Server/` unless absolute. |
+| `Q_LEARNING_RATE` | Q-value learning rate, greater than `0` and up to `1`. |
+| `Q_DISCOUNT_FACTOR` | Future reward discount factor from `0` to `1`. |
+| `Q_EPSILON_START` | Initial exploration rate. |
+| `Q_EPSILON_MIN` | Minimum exploration rate. |
+| `Q_EPSILON_DECAY` | Epsilon multiplier applied after completed episodes. |
+| `Q_MAX_STEPS_PER_EPISODE` | Safety limit for episode length. |
 
-The reward function is designed around:  
-- How close the racket is to the ball  
-- Whether the agent hits the ball  
-- Whether either player scores  
-- Time-step penalties to encourage efficiency  
+## Model Persistence
 
-Mathematically, the reward components are:
-
-```
-[
-  +1.0   if the agent scores
-  -1.0   if the opponent scores
-  +0.3   if the agent hits the ball
-  +0.05  if the vertical distance decreases
-  -0.05  if the vertical distance increases
-  -0.001 time penalty per step
-]
-```
-
-The total reward is defined as:
-
-```
-reward = reward_score 
-       + reward_lose 
-       + reward_hit 
-       + reward_alignment 
-       + reward_time
-```
+If the model file is missing, the server starts with an empty Q-table and logs a warning. If the model file is corrupted, the server also starts with an empty Q-table instead of crashing.

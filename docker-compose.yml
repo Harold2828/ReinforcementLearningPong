@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: ./Server
+    env_file:
+      - .env.example
+    environment:
+      FLASK_DEBUG: "false"
+    ports:
+      - "5001:5001"
+    volumes:
+      - q_learning_models:/app/models
+
+  frontend:
+    build:
+      context: ./PongGame
+      args:
+        VITE_BACKEND_URL: http://localhost:5001
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  q_learning_models:

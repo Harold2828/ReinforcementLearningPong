@@ -1,0 +1,6 @@
+__pycache__
+.pytest_cache
+*.pyc
+server_env
+models/q_learning_model.json
+assets/screenshots

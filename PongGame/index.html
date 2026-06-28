@@ -8,7 +8,6 @@
     <link rel="icon" type="image/svg+xml" href="/assets/company/logo.png" />
     <link rel="stylesheet" href="/styles/main.css" />
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <title>Reinforcement Learning Pong Game</title>
   </head>
   <body>
@@ -18,6 +17,43 @@
       <h1>Reinforcement Learning Pong Game</h1>
     </header>
     <main>
+      <aside class="training-panel" aria-label="Training dashboard">
+        <div class="status-row">
+          <span>Backend</span>
+          <strong data-ui="connection-status">Disconnected</strong>
+        </div>
+        <div class="metrics-grid">
+          <div>
+            <span>Mode</span>
+            <strong data-ui="mode">Manual</strong>
+          </div>
+          <div>
+            <span>Episode</span>
+            <strong data-ui="episode">1</strong>
+          </div>
+          <div>
+            <span>Reward</span>
+            <strong data-ui="reward">0.00</strong>
+          </div>
+          <div>
+            <span>Epsilon</span>
+            <strong data-ui="epsilon">0.000</strong>
+          </div>
+          <div>
+            <span>Score</span>
+            <strong data-ui="score">0 - 0</strong>
+          </div>
+          <div>
+            <span>Feedback</span>
+            <strong data-ui="feedback">Ready</strong>
+          </div>
+        </div>
+        <div class="control-row">
+          <button type="button" data-action="start-training">Start training</button>
+          <button type="button" data-action="stop-training">Stop training</button>
+          <button type="button" data-action="reset-episode">Reset episode</button>
+        </div>
+      </aside>
       <section id="game-container" aria-label="Game Container">
         <!-- Game will be rendered here -->
       </section>

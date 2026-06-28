@@ -1,52 +1,54 @@
-//import io from "socket.io-client";
+import { io } from "socket.io-client";
 
-class SocketManager{
-
-    constructor(serverUrl){
-
-        this.socket = io(serverUrl);
-
-        this.socket.on(
-            "connect",
-            (data)=>{
-
-                console.debug("Connected to server");
-            }
-        );
-
-
-    }
-
-    sendPlayerMove(environment){
-        if(this.socket){
-            this.socket.emit("player_action", environment);
-        }
-    }
-
-    getMachineMove(){
-        return new Promise((resolve, reject) => {
-            if (this.socket) {
-                this.socket.on("ai_move", (data) => {
-                    resolve(data);
-                });
-            } else {
-                reject(new Error("Socket is not connected"));
-            }
+class SocketManager {
+    constructor(serverUrl) {
+        this.socket = io(serverUrl, {
+            transports: ["websocket", "polling"],
+            reconnection: true,
         });
     }
 
-    on(event, callback){
-        if(this.socket){
-            this.socket.on(event, callback);
-        }
+    onConnectionChange(callback) {
+        this.socket.on("connect", () => callback(true));
+        this.socket.on("disconnect", () => callback(false));
+        this.socket.on("connect_error", () => callback(false));
     }
 
-    disconnect(){
-        if(this.socket){
-            this.socket.disconnect();
-        }
+    onAiMove(callback) {
+        this.socket.on("ai_move", callback);
     }
 
+    onTrainingStatus(callback) {
+        this.socket.on("training_status", callback);
+    }
+
+    onStateError(callback) {
+        this.socket.on("state_error", callback);
+    }
+
+    sendStateUpdate(environmentState) {
+        if (this.socket?.connected) {
+            this.socket.emit("state_update", environmentState);
+            return true;
+        }
+        return false;
+    }
+
+    startTraining() {
+        this.socket?.emit("start_training");
+    }
+
+    stopTraining() {
+        this.socket?.emit("stop_training");
+    }
+
+    resetEpisode() {
+        this.socket?.emit("reset_episode");
+    }
+
+    disconnect() {
+        this.socket?.disconnect();
+    }
 }
 
 export default SocketManager;

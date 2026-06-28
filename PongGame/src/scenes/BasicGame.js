@@ -1,295 +1,360 @@
-import Phaser from 'phaser';
-import SocketManager from '../utils/socketManager';
-import { randomNormal } from '../utils/customRandom';
+import Phaser from "phaser";
+import SocketManager from "../utils/socketManager";
+import { randomNormal } from "../utils/customRandom";
+import { DashboardController } from "../utils/dashboardController";
+import {
+    ACTIONS,
+    applyAgentActionToPaddle,
+    buildQlearningState,
+    normalizeAgentAction,
+} from "../utils/gameState";
 
 class BasicGame extends Phaser.Scene {
-
     constructor() {
-    
-        super({ key: 'BasicGame' });
+        super({ key: "BasicGame" });
 
-        //Mechanics
         this.background = {
-            court:{
-                image: null
-            },
-            ball:{
+            court: { image: null },
+            ball: {
                 image: null,
-                sound:null,
-                initial:{
-                    position:{
-                        x: 400,
-                        y: 300
-                    },
-                    velocity:{
-                        x: 200,
-                        y: 200
-                    }
-                }
+                sound: null,
+                initial: {
+                    position: { x: 400, y: 300 },
+                    velocity: { x: 200, y: 200 },
+                },
             },
-            text:{
-                scores:{
-                    combo_smash:null,
+            text: {
+                scores: {
+                    comboSmash: null,
                     team1: null,
-                    team2: null
-                }
-            }
+                    team2: null,
+                },
+            },
         };
         this.actors = {
-            point:{
-                sound:null,
-            },
-            number_of_players: 2, 
-            scores:{
-                combo_smash:0
-            },
+            point: { sound: null },
+            numberOfPlayers: 2,
+            scores: { comboSmash: 0 },
             players: [
-                {
-                    image: null,
-                    racket: null,
-                    score: 0,
-                    team: null
-                },
-                {
-                    image: null,
-                    racket: null,
-                    score: 0,
-                    team: null
-                }
-            ]
-        }
-        this.cursors = {
-            keyboard: null,
+                { racket: null, score: 0, team: null },
+                { racket: null, score: 0, team: null },
+            ],
         };
-
-        //Socket manager
+        this.cursors = { keyboard: null };
         this.socketManager = null;
-
-        this.lastScoredBy = null;   // 'myself' | 'player' | null
-        this.ballWasHit  = false;   // true if ball hit a racket since last tick
+        this.dashboardController = null;
+        this.trainingActive = true;
+        this.pendingAgentAction = ACTIONS.STAY;
+        this.lastScoredBy = null;
+        this.ballWasHit = false;
+        this.agentMissedBall = false;
+        this.previousDistanceToBall = null;
+        this.latestReward = 0;
+        this.latestEpsilon = 0;
+        this.currentEpisode = 1;
     }
 
-    preload(){
-
-        this.load.image('court', 'assets/background/court.png');
-        this.load.image('ball', 'assets/background/ball.png');
-        this.load.atlas('rackets', 'assets/player/rackets.png', 'assets/player/rackets.json');    
-
-        this.load.audio('smash', 'assets/background/smash.wav');
-        this.load.audio('point', 'assets/background/point.mp3');
+    preload() {
+        this.load.image("court", "assets/background/court.png");
+        this.load.image("ball", "assets/background/ball.png");
+        this.load.atlas("rackets", "assets/player/rackets.png", "assets/player/rackets.json");
+        this.load.audio("smash", "assets/background/smash.wav");
+        this.load.audio("point", "assets/background/point.mp3");
     }
 
     create() {
-
-        let { width, height } = this.sys.game.canvas;
+        const { width, height } = this.sys.game.canvas;
         this.width = width;
         this.height = height;
-    
-        /****AI INTEGRATION****/
-        this.socketManager = new SocketManager("http://127.0.0.1:5001");
 
-        /****SETTINGS****/
+        this.dashboardController = new DashboardController();
+        this.dashboardController.bindControls({
+            onStartTraining: () => this.startTraining(),
+            onStopTraining: () => this.stopTraining(),
+            onResetEpisode: () => this.resetEpisode(),
+        });
+        this.dashboardController.setTrainingActive(true);
 
-        // Settings court
-        this.background.court.image = this.add.image(400, 300, 'court');
+        this.configureSocket();
+        this.configureCourt();
+        this.configureBall();
+        this.configureScores();
+        this.configurePlayers();
+        this.configureKeyboard();
+
+        this.physics.world.on("worldbounds", this.handleGoal, this);
+        this.background.ball.image.body.onWorldBounds = true;
+    }
+
+    update() {
+        this.actors.players[0].racket.setVelocityY(0);
+        this.actors.players[1].racket.setVelocityY(0);
+
+        if (this.trainingActive) {
+            applyAgentActionToPaddle(this.actors.players[0].racket, this.pendingAgentAction);
+            this.sendTrainingState();
+        } else {
+            this.handleManualAgentControls();
+        }
+
+        this.handleOpponentControls();
+        this.updateScoreText();
+        this.updateDashboard();
+        this.resetTransientEvents();
+    }
+
+    configureSocket() {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:5001";
+        this.socketManager = new SocketManager(backendUrl);
+
+        this.socketManager.onConnectionChange((isConnected) => {
+            this.dashboardController.update({
+                connected: isConnected,
+                mode: this.trainingActive ? "Training" : "Manual",
+                feedback: isConnected ? "Backend connected" : "Backend disconnected",
+            });
+        });
+
+        this.socketManager.onAiMove((payload) => {
+            const selectedAction = normalizeAgentAction(payload);
+            if (!selectedAction) {
+                console.warn("Invalid backend action ignored.", payload);
+                return;
+            }
+            this.pendingAgentAction = selectedAction;
+            this.latestReward = Number(payload.reward ?? this.latestReward);
+            this.latestEpsilon = Number(payload.epsilon ?? this.latestEpsilon);
+            this.currentEpisode = Number(payload.episode ?? this.currentEpisode);
+        });
+
+        this.socketManager.onTrainingStatus((payload) => {
+            this.currentEpisode = Number(payload.episode ?? this.currentEpisode);
+            this.latestEpsilon = Number(payload.epsilon ?? this.latestEpsilon);
+            this.dashboardController.update({
+                connected: Boolean(payload.connected),
+                mode: payload.mode ?? (this.trainingActive ? "Training" : "Manual"),
+                episode: this.currentEpisode,
+                epsilon: this.latestEpsilon,
+            });
+        });
+
+        this.socketManager.onStateError((payload) => {
+            console.warn("Backend rejected state payload.", payload);
+            this.dashboardController.update({ feedback: payload.message ?? "State rejected" });
+        });
+    }
+
+    configureCourt() {
+        this.background.court.image = this.add.image(400, 300, "court");
         this.background.court.image.setOrigin(0.5, 0.5);
         this.background.court.image.setScale(1, 0.6);
-    
-        // Settings ball
-        const initialPositionX = this.background.ball.initial.position.x;
-        const initialPositionY = this.background.ball.initial.position.y;
+    }
+
+    configureBall() {
+        const { x, y } = this.background.ball.initial.position;
         this.background.ball.sound = this.sound.add("smash");
-        this.background.ball.image = this.physics.add.image(initialPositionX, initialPositionY, 'ball');
+        this.background.ball.image = this.physics.add.image(x, y, "ball");
         this.background.ball.image.setOrigin(0.5, 0.5);
         this.background.ball.image.setScale(0.1, 0.1);
         this.background.ball.image.setCollideWorldBounds(true);
         this.background.ball.image.setBounce(1, 1);
         this.background.ball.image.setVelocity(
             this.background.ball.initial.velocity.x,
-            this.background.ball.initial.velocity.y
+            this.background.ball.initial.velocity.y,
         );
+    }
 
-        // Settings scores
-        this.background.text.scores.team1 = this.add.text(100, 20, 'Team 1: 0', { 
-            fontSize: '10px', 
+    configureScores() {
+        const textStyle = {
+            fontSize: "10px",
             fontFamily: "'Press Start 2P', 'Courier New', monospace",
-            fill: 'black' 
-        });
-        this.background.text.scores.team2 = this.add.text(600, 20, 'Team 2: 0', { 
-            fontSize: '10px', 
+            fill: "black",
+        };
+        this.background.text.scores.team1 = this.add.text(100, 20, "Agent: 0", textStyle);
+        this.background.text.scores.team2 = this.add.text(600, 20, "Opponent: 0", textStyle);
+        this.background.text.scores.comboSmash = this.add.text(300, 20, "Combo smash: 0", {
+            fontSize: "15px",
             fontFamily: "'Press Start 2P', 'Courier New', monospace",
-            fill: 'black' 
+            fill: "green",
+            backgroundColor: "black",
         });
+    }
 
-        //Combo smash
-        this.background.text.scores.combo_smash = this.add.text(300,20, "Combo smash: 0",{
-            fontSize:'15px',
-            fontFamily: "'Press Start 2P', 'Courier New', monospace",
-            fill:'green',
-            backgroundColor:"black"
-        });
-    
-        // Settings players
+    configurePlayers() {
         this.actors.point.sound = this.sound.add("point");
-        for(let countOfPlayers = 0; countOfPlayers < this.actors.number_of_players; countOfPlayers++){
-            
-            //Define the position of the players and the team
-            let xCoordinates = 100; //By default is on the right side
-            this.actors.players[countOfPlayers].team = "team1";
-            if(countOfPlayers % 2 == 0){
-                xCoordinates = 700; //In case of even number of players, the player is on the left side
-                this.actors.players[countOfPlayers].team = "team2";
+        for (let playerIndex = 0; playerIndex < this.actors.numberOfPlayers; playerIndex += 1) {
+            let xCoordinate = 100;
+            this.actors.players[playerIndex].team = "opponent";
+            if (playerIndex === 0) {
+                xCoordinate = 700;
+                this.actors.players[playerIndex].team = "agent";
             }
-            this.actors.players[countOfPlayers].racket = this.physics.add.image(xCoordinates, 300, 'rackets', this.getRandomRacket());
-            this.actors.players[countOfPlayers].racket.setOrigin(0.5, 0.5);
-            this.actors.players[countOfPlayers].racket.setScale(0.2, 0.2);
-            this.actors.players[countOfPlayers].racket.setCollideWorldBounds(true);
-            this.actors.players[countOfPlayers].racket.setImmovable(true);
 
-            //Colliders
-            this.physics.add.collider(
-                this.actors.players[countOfPlayers].racket, 
-                this.background.ball.image,
-                this.handleBallCollision,
-                null,
-                this
-            );
+            const racket = this.physics.add.image(xCoordinate, 300, "rackets", this.getRandomRacket());
+            racket.setOrigin(0.5, 0.5);
+            racket.setScale(0.2, 0.2);
+            racket.setCollideWorldBounds(true);
+            racket.setImmovable(true);
+            this.actors.players[playerIndex].racket = racket;
+
+            this.physics.add.collider(racket, this.background.ball.image, this.handleBallCollision, null, this);
         }
+    }
 
-        //Define the cursor
+    configureKeyboard() {
         this.cursors.keyboard = this.input.keyboard.createCursorKeys();
         this.cursors.keyboard.w = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
         this.cursors.keyboard.s = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
-
-        /****MECHANICS****/
-        this.physics.world.on('worldbounds', this.handleGoal, this);
-        this.background.ball.image.body.onWorldBounds = true;
     }
 
-    update(){
-        this.socketManager.getMachineMove()
-        .then((data) => {
-
-            if(data.direction == "up"){
-                this.actors.players[0].racket.setVelocityY(-500);
-            }else if(data.direction == "down"){
-                this.actors.players[0].racket.setVelocityY(500);
-            }
-        })
-        .catch((error) => {
-            console.error("Error:", error);
-        });
-
-        //Up and down movement
-        this.actors.players[0].racket.setVelocityY(0);
-        if(this.cursors.keyboard.up.isDown){
-            this.actors.players[0].racket.setVelocityY(-500);
-        }else if(this.cursors.keyboard.down.isDown){
-            this.actors.players[0].racket.setVelocityY(500);
-        }
-
-        //Player 2 movement
-        this.actors.players[1].racket.setVelocityY(0);
-        let environment = {
-            combo_smash: this.actors.scores.combo_smash,
+    sendTrainingState() {
+        const currentDistanceToBall = Math.abs(this.background.ball.image.y - this.actors.players[0].racket.y);
+        const environmentState = buildQlearningState({
             width: this.width,
             height: this.height,
-            myself: {
-                scored: this.lastScoredBy === 'myself',   // dynamic
-                score: this.actors.players[0].score,
-                position: {
-                    x: this.actors.players[0].racket.x,
-                    y: this.actors.players[0].racket.y
-                }
-            },
-            player: {
-                scored: this.lastScoredBy === 'player',   // dynamic
-                score: this.actors.players[1].score,
-                position: {
-                    x: this.actors.players[1].racket.x,
-                    y: this.actors.players[1].racket.y
-                }
-            },
-            ball: {
-                hit: this.ballWasHit,                     // dynamic
-                position: {
-                    x: this.background.ball.image.x,
-                    y: this.background.ball.image.y
-                }
-            }
-        };
+            ball: this.background.ball.image,
+            agentPaddle: this.actors.players[0].racket,
+            opponentPaddle: this.actors.players[1].racket,
+            scoreAgent: this.actors.players[0].score,
+            scoreOpponent: this.actors.players[1].score,
+            done: this.lastScoredBy !== null,
+            agentHitBall: this.ballWasHit,
+            agentMissedBall: this.agentMissedBall,
+            agentScored: this.lastScoredBy === "agent",
+            previousDistanceToBall: this.previousDistanceToBall,
+        });
 
-        if (this.cursors.keyboard.w.isDown) {
-            environment.player.action = "up";
-            this.socketManager.sendPlayerMove(environment);
-            this.actors.players[1].racket.setVelocityY(-500);
-        } else if (this.cursors.keyboard.s.isDown) {
-            environment.player.action = "down";
-            this.socketManager.sendPlayerMove(environment);
-            this.actors.players[1].racket.setVelocityY(500);
-        } else {
-            this.socketManager.sendPlayerMove(environment);
+        const stateWasSent = this.socketManager.sendStateUpdate(environmentState);
+        if (!stateWasSent) {
+            this.dashboardController.update({
+                connected: false,
+                feedback: "Training paused until backend reconnects",
+            });
         }
-
-        // Reset event flags after sending
-        this.lastScoredBy = null;
-        this.ballWasHit = false;
-
-
-        this.background.text.scores.combo_smash.setText(
-            "Combo smash: " + 
-            this.actors.scores.combo_smash
-        );
+        this.previousDistanceToBall = currentDistanceToBall;
     }
 
-    getRandomRacket(){
+    handleManualAgentControls() {
+        if (this.cursors.keyboard.up.isDown) {
+            this.actors.players[0].racket.setVelocityY(-500);
+        } else if (this.cursors.keyboard.down.isDown) {
+            this.actors.players[0].racket.setVelocityY(500);
+        }
+    }
+
+    handleOpponentControls() {
+        if (this.cursors.keyboard.w.isDown) {
+            this.actors.players[1].racket.setVelocityY(-500);
+        } else if (this.cursors.keyboard.s.isDown) {
+            this.actors.players[1].racket.setVelocityY(500);
+        }
+    }
+
+    startTraining() {
+        this.trainingActive = true;
+        this.dashboardController.setTrainingActive(true);
+        this.socketManager.startTraining();
+        this.dashboardController.update({ mode: "Training", feedback: "Training started" });
+    }
+
+    stopTraining() {
+        this.trainingActive = false;
+        this.pendingAgentAction = ACTIONS.STAY;
+        this.dashboardController.setTrainingActive(false);
+        this.socketManager.stopTraining();
+        this.dashboardController.update({ mode: "Manual", feedback: "Training stopped" });
+    }
+
+    resetEpisode() {
+        this.actors.players[0].score = 0;
+        this.actors.players[1].score = 0;
+        this.actors.scores.comboSmash = 0;
+        this.lastScoredBy = null;
+        this.ballWasHit = false;
+        this.agentMissedBall = false;
+        this.previousDistanceToBall = null;
+        this.pendingAgentAction = ACTIONS.STAY;
+        this.resetBall();
+        this.socketManager.resetEpisode();
+        this.dashboardController.update({
+            scoreAgent: 0,
+            scoreOpponent: 0,
+            reward: 0,
+            feedback: "Episode reset",
+        });
+    }
+
+    updateDashboard() {
+        this.dashboardController.update({
+            mode: this.trainingActive ? "Training" : "Manual",
+            episode: this.currentEpisode,
+            reward: this.latestReward,
+            epsilon: this.latestEpsilon,
+            scoreAgent: this.actors.players[0].score,
+            scoreOpponent: this.actors.players[1].score,
+            feedback: this.ballWasHit ? "Agent hit the ball" : this.agentMissedBall ? "Agent missed the ball" : "Playing",
+        });
+    }
+
+    updateScoreText() {
+        this.background.text.scores.team1.setText(`Agent: ${this.actors.players[0].score}`);
+        this.background.text.scores.team2.setText(`Opponent: ${this.actors.players[1].score}`);
+        this.background.text.scores.comboSmash.setText(`Combo smash: ${this.actors.scores.comboSmash}`);
+    }
+
+    resetTransientEvents() {
+        this.lastScoredBy = null;
+        this.ballWasHit = false;
+        this.agentMissedBall = false;
+    }
+
+    getRandomRacket() {
         return Phaser.Utils.Array.GetRandom(this.textures.get("rackets").getFrameNames());
     }
 
     handleBallCollision(racket, ball) {
         this.background.ball.sound.play();
-        this.actors.scores.combo_smash += 1;
+        this.actors.scores.comboSmash += 1;
+        if (racket === this.actors.players[0].racket) {
+            this.ballWasHit = true;
+        }
 
-        // Mark that the ball was hit
-        this.ballWasHit = true;
-
-        const diff = ball.y - racket.y;
-        ball.setVelocityY(diff * randomNormal(3.5, 1.1));
+        const differenceFromRacket = ball.y - racket.y;
+        ball.setVelocityY(differenceFromRacket * randomNormal(3.5, 1.1));
         ball.setVelocityX(ball.body.velocity.x * randomNormal(1.5, 0.4));
 
         const angle = Math.atan2(ball.body.velocity.y, ball.body.velocity.x);
         ball.setAngle(Phaser.Math.RadToDeg(angle));
     }
 
-
     handleGoal(body, up, down, left, right) {
-        const initialPositionX = this.background.ball.initial.position.x;
-        const initialPositionY = this.background.ball.initial.position.y;
-
-        if (left || right) {
-            this.actors.point.sound.play();
-            this.actors.scores.combo_smash = 0;
-
-            // left world bound → Team 2 scores (player[1])
-            // right world bound → Team 1 scores (player[0])
-            if (left) {
-                this.actors.players[1].score++;
-                this.lastScoredBy = 'player';   // human / second racket
-                this.background.text.scores.team2.setText(`Team 2: ${this.actors.players[1].score}`);
-            } else if (right) {
-                this.actors.players[0].score++;
-                this.lastScoredBy = 'myself';   // AI / first racket
-                this.background.text.scores.team1.setText(`Team 1: ${this.actors.players[0].score}`);
-            }
-
-            this.background.ball.image.setPosition(initialPositionX, initialPositionY);
-            this.background.ball.image.setVelocity(
-                randomNormal(175, 40) * (left ? 1 : -1),
-                randomNormal(170, 25) * (left ? 1 : -1)
-            );
+        if (!(left || right)) {
+            return;
         }
+
+        this.actors.point.sound.play();
+        this.actors.scores.comboSmash = 0;
+
+        if (left) {
+            this.actors.players[1].score += 1;
+            this.lastScoredBy = "opponent";
+            this.agentMissedBall = true;
+        } else if (right) {
+            this.actors.players[0].score += 1;
+            this.lastScoredBy = "agent";
+        }
+
+        this.resetBall(left);
     }
 
+    resetBall(leftBoundaryWasHit = false) {
+        const { x, y } = this.background.ball.initial.position;
+        this.background.ball.image.setPosition(x, y);
+        this.background.ball.image.setVelocity(
+            randomNormal(175, 40) * (leftBoundaryWasHit ? 1 : -1),
+            randomNormal(170, 25) * (leftBoundaryWasHit ? 1 : -1),
+        );
+    }
 }
 
 export default BasicGame;

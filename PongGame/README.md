@@ -1,46 +1,69 @@
-**[🔙 ](README.md)**
+# Pong Game Frontend
 
-# 🏓 Pong Game – Reinforcement Learning Edition
+This is the PhaserJS game client for the Reinforcement Learning Pong project. It renders Pong, sends Q-learning state updates to the backend, and displays a training dashboard for connection status, episode metrics, rewards, epsilon, score, and hit/miss feedback.
 
-This is a simple Pong-style game built using **PhaserJS**, bundled with **Vite**, and powered by **NodeJS**. It serves as a fun playground for experimenting with reinforcement learning and basic game mechanics.
+## Tech Stack
 
-![Initial Screenshot](public/assets/screenshots/initial.png)
+- Vite
+- PhaserJS
+- Socket.IO client
+- Vitest
 
----
+## Run
 
-## 🧰 Tech Stack
-
-- **NodeJS**
-- **Vite** – for fast development builds
-- **PhaserJS** – game development framework
-
----
-
-## 🚀 Getting Started
-
-### ✅ Requirements
-
-Before running the project, make sure you have the following installed:
-
-- [Node.js](https://nodejs.org/en/)
-
-### 📦 Installation & Run
-
-1. **Clone the repository**  
-```bash
-git clone https://github.com/Harold2828/ReinforcementLearningPong
-```
-2. **Navigate into the project folder**
-```bash
-cd PongGame
-```
-3. **Install the dependencies**
 ```bash
 npm install
-```
-4. **Run the development server**
-```bash
 npm run dev
 ```
 
-💡 Open your browser and navigate to the local server URL provided in the terminal (typically http://localhost:5173)
+Open `http://localhost:5173`.
+
+To point the game at another backend:
+
+```bash
+VITE_BACKEND_URL=http://localhost:5001 npm run dev
+```
+
+## Controls
+
+| Control | Purpose |
+|---|---|
+| Start training | Sends `start_training` and resumes backend action requests. |
+| Stop training | Sends `stop_training` and pauses training state updates. |
+| Reset episode | Resets scores, ball state, episode flags, and backend episode state. |
+| Arrow up/down | Moves the agent paddle while training is stopped. |
+| W/S | Moves the opponent paddle. |
+
+## Dashboard
+
+The dashboard shows:
+
+- Backend connection status.
+- Agent mode: `Training`, `Evaluation`, or `Manual`.
+- Episode number.
+- Latest reward value.
+- Current epsilon value.
+- Current score.
+- Hit/miss and connection feedback.
+
+## Tests
+
+```bash
+npm test
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+## Docker
+
+From the repository root:
+
+```bash
+docker compose up --build frontend
+```
+
+The Docker Compose setup passes `VITE_BACKEND_URL=http://localhost:5001` so the browser can connect to the backend port exposed on the host.
