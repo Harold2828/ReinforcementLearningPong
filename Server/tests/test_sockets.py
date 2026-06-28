@@ -3,33 +3,39 @@ from app import create_app, socketio
 
 def valid_state_payload():
     return {
+        "gameMode": "HUMAN_VS_AI",
         "ballX": 400,
         "ballY": 300,
         "ballVelocityX": -120,
         "ballVelocityY": 30,
-        "paddleY": 295,
+        "agentPaddleY": 295,
         "opponentPaddleY": 310,
-        "scoreAgent": 0,
-        "scoreOpponent": 0,
-        "done": False,
+        "agentScore": 0,
+        "opponentScore": 0,
+        "lastHitBy": None,
+        "pointWinner": None,
         "width": 800,
         "height": 600,
     }
 
 
 def test_websocket_valid_state_returns_action(monkeypatch, tmp_path):
-    monkeypatch.setenv("MODEL_SAVE_PATH", str(tmp_path / "q_learning_model.json"))
+    monkeypatch.setenv("AGENT_MODEL_SAVE_PATH", str(tmp_path / "agent_q_learning_model.json"))
+    monkeypatch.setenv("OPPONENT_MODEL_SAVE_PATH", str(tmp_path / "opponent_q_learning_model.json"))
     app = create_app()
     client = socketio.test_client(app)
 
     response = client.emit("state_update", valid_state_payload(), callback=True)
 
     assert response["action"] in {"UP", "DOWN", "STAY"}
-    assert isinstance(response["reward"], float)
+    assert response["agentAction"] in {"UP", "DOWN", "STAY"}
+    assert response["opponentAction"] == "STAY"
+    assert isinstance(response["agentReward"], float)
 
 
 def test_websocket_invalid_state_returns_controlled_error(monkeypatch, tmp_path):
-    monkeypatch.setenv("MODEL_SAVE_PATH", str(tmp_path / "q_learning_model.json"))
+    monkeypatch.setenv("AGENT_MODEL_SAVE_PATH", str(tmp_path / "agent_q_learning_model.json"))
+    monkeypatch.setenv("OPPONENT_MODEL_SAVE_PATH", str(tmp_path / "opponent_q_learning_model.json"))
     app = create_app()
     client = socketio.test_client(app)
     payload = valid_state_payload()
@@ -41,7 +47,8 @@ def test_websocket_invalid_state_returns_controlled_error(monkeypatch, tmp_path)
 
 
 def test_training_control_events_update_status(monkeypatch, tmp_path):
-    monkeypatch.setenv("MODEL_SAVE_PATH", str(tmp_path / "q_learning_model.json"))
+    monkeypatch.setenv("AGENT_MODEL_SAVE_PATH", str(tmp_path / "agent_q_learning_model.json"))
+    monkeypatch.setenv("OPPONENT_MODEL_SAVE_PATH", str(tmp_path / "opponent_q_learning_model.json"))
     app = create_app()
     client = socketio.test_client(app)
 
@@ -49,6 +56,38 @@ def test_training_control_events_update_status(monkeypatch, tmp_path):
     startResponse = client.emit("start_training", callback=True)
     resetResponse = client.emit("reset_episode", callback=True)
 
-    assert stopResponse["mode"] == "Evaluation"
-    assert startResponse["mode"] == "Training"
-    assert resetResponse["episode"] >= 1
+    assert stopResponse["learningEnabled"] is False
+    assert startResponse["connected"] is True
+    assert resetResponse["connected"] is True
+
+
+def test_ai_vs_ai_returns_two_valid_actions(monkeypatch, tmp_path):
+    monkeypatch.setenv("AGENT_MODEL_SAVE_PATH", str(tmp_path / "agent_q_learning_model.json"))
+    monkeypatch.setenv("OPPONENT_MODEL_SAVE_PATH", str(tmp_path / "opponent_q_learning_model.json"))
+    app = create_app()
+    client = socketio.test_client(app)
+    payload = valid_state_payload()
+    payload["gameMode"] = "AI_VS_AI"
+
+    response = client.emit("state_update", payload, callback=True)
+
+    assert response["agentAction"] in {"UP", "DOWN", "STAY"}
+    assert response["opponentAction"] in {"UP", "DOWN", "STAY"}
+
+
+def test_training_self_play_saves_separate_models(monkeypatch, tmp_path):
+    agentModelPath = tmp_path / "agent_q_learning_model.json"
+    opponentModelPath = tmp_path / "opponent_q_learning_model.json"
+    monkeypatch.setenv("AGENT_MODEL_SAVE_PATH", str(agentModelPath))
+    monkeypatch.setenv("OPPONENT_MODEL_SAVE_PATH", str(opponentModelPath))
+    app = create_app()
+    client = socketio.test_client(app)
+    payload = valid_state_payload()
+    payload["gameMode"] = "TRAINING_SELF_PLAY"
+    payload["pointWinner"] = "agent"
+
+    response = client.emit("state_update", payload, callback=True)
+
+    assert response["learningEnabled"] is True
+    assert agentModelPath.exists()
+    assert opponentModelPath.exists()

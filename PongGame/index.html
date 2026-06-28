@@ -22,26 +22,64 @@
           <span>Backend</span>
           <strong data-ui="connection-status">Disconnected</strong>
         </div>
+        <label class="mode-select">
+          <span>Game mode</span>
+          <select data-action="select-game-mode" aria-label="Game mode">
+            <option value="HUMAN_VS_AI">Human vs AI</option>
+            <option value="AI_VS_HUMAN">AI vs Human</option>
+            <option value="AI_VS_AI">AI vs AI</option>
+            <option value="TRAINING_SELF_PLAY">Training Self-Play</option>
+            <option value="EVALUATION">Evaluation</option>
+          </select>
+        </label>
         <div class="metrics-grid">
           <div>
             <span>Mode</span>
             <strong data-ui="mode">Manual</strong>
           </div>
           <div>
+            <span>Control</span>
+            <strong data-ui="ownership">Left: Human | Right: AI Agent</strong>
+          </div>
+          <div>
+            <span>Learning</span>
+            <strong data-ui="learning-status">Learning disabled</strong>
+          </div>
+          <div>
             <span>Episode</span>
             <strong data-ui="episode">1</strong>
           </div>
           <div>
-            <span>Reward</span>
+            <span>Agent reward</span>
             <strong data-ui="reward">0.00</strong>
           </div>
           <div>
-            <span>Epsilon</span>
+            <span>Opponent reward</span>
+            <strong data-ui="opponent-reward">0.00</strong>
+          </div>
+          <div>
+            <span>Agent epsilon</span>
             <strong data-ui="epsilon">0.000</strong>
+          </div>
+          <div>
+            <span>Opponent epsilon</span>
+            <strong data-ui="opponent-epsilon">0.000</strong>
           </div>
           <div>
             <span>Score</span>
             <strong data-ui="score">0 - 0</strong>
+          </div>
+          <div>
+            <span>Agent metrics</span>
+            <strong data-ui="agent-metrics">Win 0% | Hit 0% | Avg 0.00</strong>
+          </div>
+          <div>
+            <span>Opponent metrics</span>
+            <strong data-ui="opponent-metrics">Win 0% | Hit 0% | Avg 0.00</strong>
+          </div>
+          <div>
+            <span>Self-play episodes</span>
+            <strong data-ui="self-play-episodes">0</strong>
           </div>
           <div>
             <span>Feedback</span>

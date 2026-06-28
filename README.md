@@ -1,6 +1,6 @@
 # Reinforcement Learning Pong
 
-This project combines a PhaserJS Pong game with a Flask-SocketIO backend and a tabular Q-learning agent. The game sends structured state updates to the backend, the backend selects one of three valid actions, and training metrics make gameplay improvement measurable over time.
+This project combines a PhaserJS Pong game with a Flask-SocketIO backend and tabular Q-learning agents. The game sends structured state updates to the backend, the backend selects valid paddle actions, and training metrics make gameplay improvement measurable over time. The current training flow supports competitive self-play with two independent Q-learning agents.
 
 ## Project Structure
 
@@ -11,39 +11,50 @@ This project combines a PhaserJS Pong game with a Flask-SocketIO backend and a t
 | `docker-compose.yml` | Runs frontend and backend together for local development. |
 | `.env.example` | Documents Q-learning configuration values. |
 
-## Q-Learning Contract
+## Game Modes
+
+| Mode | Left Paddle | Right Paddle | Learning |
+|---|---|---|---|
+| `Human vs AI` | Human | AI Agent | Disabled |
+| `AI vs Human` | AI Opponent | Human | Disabled |
+| `AI vs AI` | AI Opponent | AI Agent | Disabled |
+| `Training Self-Play` | AI Opponent | AI Agent | Enabled |
+| `Evaluation` | AI Opponent | AI Agent | Disabled |
+
+## Multi-Agent Q-Learning Contract
 
 The frontend sends `state_update` WebSocket messages with these required fields:
 
 | Field | Type | Description |
 |---|---:|---|
+| `gameMode` | string | Active game mode. |
 | `ballX` | number | Ball horizontal position. |
 | `ballY` | number | Ball vertical position. |
 | `ballVelocityX` | number | Ball horizontal velocity. |
 | `ballVelocityY` | number | Ball vertical velocity. |
-| `paddleY` | number | Agent paddle vertical position. |
-| `scoreAgent` | number | Agent score. |
-| `scoreOpponent` | number | Opponent score. |
-| `done` | boolean | Whether the episode ended. |
+| `agentPaddleY` | number | Right/main agent paddle vertical position. |
+| `opponentPaddleY` | number | Left/opponent paddle vertical position. |
+| `agentScore` | number | Right/main agent score. |
+| `opponentScore` | number | Left/opponent score. |
 
-Optional fields include `opponentPaddleY`, `agentHitBall`, `agentMissedBall`, `agentScored`, `previousDistanceToBall`, `width`, and `height`.
+Optional fields include `lastHitBy`, `pointWinner`, `episodeId`, `previousAgentDistanceToBall`, `previousOpponentDistanceToBall`, `width`, and `height`.
 
-The backend returns one action in `ai_move`: `UP`, `DOWN`, or `STAY`. Invalid frontend payloads are rejected through `state_error`.
+The backend returns `agentAction` and `opponentAction` in `ai_move`. Each action is `UP`, `DOWN`, or `STAY`. Invalid frontend payloads are rejected through `state_error`.
 
 ## Reward Rules
 
-The Q-learning reward function uses:
+The adversarial Q-learning reward function uses:
 
-| Event | Reward |
-|---|---:|
-| Paddle hits ball | `+1.0` |
-| Agent scores point | `+5.0` |
-| Agent misses ball | `-5.0` |
-| Paddle moves closer to ball | `+0.1` |
-| Paddle moves away from ball | `-0.1` |
-| Episode survives one step | `+0.01` |
+| Event | Agent Reward | Opponent Reward |
+|---|---:|---:|
+| Agent scores point | `+5.0` | `-5.0` |
+| Opponent scores point | `-5.0` | `+5.0` |
+| Agent hits ball | positive | small negative |
+| Opponent hits ball | small negative | positive |
+| Paddle moves closer to ball | positive alignment reward | positive alignment reward |
+| Episode survives one step | small survival reward | small survival reward |
 
-Metrics tracked per completed episode include average reward, paddle hit rate, miss rate, episode length, win rate, and epsilon value.
+Metrics tracked per completed episode include agent/opponent win rate, average reward, hit rate, self-play episodes, and epsilon values.
 
 ## Run Locally
 
@@ -98,7 +109,12 @@ docker compose up --build
 Frontend: `http://localhost:5173`  
 Backend: `http://localhost:5001`
 
-The backend stores Q-learning progress at `models/q_learning_model.json` inside the backend container volume.
+The backend stores Q-learning progress in separate model files inside the backend container volume:
+
+```text
+models/agent_q_learning_model.json
+models/opponent_q_learning_model.json
+```
 
 ## Make Commands
 
@@ -138,6 +154,8 @@ Useful support commands:
 
 ```bash
 make test
+make train-self-play
+make reset-models CONFIRM=reset
 make status
 make logs
 make down
@@ -149,7 +167,8 @@ Q-learning configuration is read from environment variables:
 
 | Variable | Default |
 |---|---:|
-| `MODEL_SAVE_PATH` | `models/q_learning_model.json` |
+| `AGENT_MODEL_SAVE_PATH` | `models/agent_q_learning_model.json` |
+| `OPPONENT_MODEL_SAVE_PATH` | `models/opponent_q_learning_model.json` |
 | `Q_LEARNING_RATE` | `0.2` |
 | `Q_DISCOUNT_FACTOR` | `0.95` |
 | `Q_EPSILON_START` | `1.0` |

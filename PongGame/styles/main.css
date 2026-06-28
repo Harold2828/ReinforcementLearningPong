@@ -53,10 +53,26 @@ main {
     gap: 0.75rem;
 }
 
+.mode-select {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.mode-select span,
 .status-row span,
 .metrics-grid span {
     color: #aab6c3;
     font-size: 0.85rem;
+}
+
+.mode-select select {
+    width: 100%;
+    min-height: 2.4rem;
+    border: 1px solid #5f6d7a;
+    border-radius: 6px;
+    background: #15171a;
+    color: #f4f7fb;
+    padding: 0.45rem 0.55rem;
 }
 
 .status-row strong,

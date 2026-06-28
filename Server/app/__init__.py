@@ -6,18 +6,21 @@ from pathlib import Path
 from flask import Flask
 from flask_socketio import SocketIO
 from .ai.q_learning_agent import QLearningAgent, QLearningConfiguration
+from .ai.multi_agent_training_service import MultiAgentTrainingService
 
 socketio = SocketIO(cors_allowed_origins="*")
 
-q_learning_agent: QLearningAgent | None = None
+multi_agent_training_service: MultiAgentTrainingService | None = None
 
 def create_app():
-    global q_learning_agent
+    global multi_agent_training_service
 
     app = Flask(__name__)
     serverRoot = Path(__file__).resolve().parents[1]
-    modelSavePath = os.getenv("MODEL_SAVE_PATH", "models/q_learning_model.json")
-    resolvedModelSavePath = serverRoot / modelSavePath
+    agentModelSavePath = os.getenv("AGENT_MODEL_SAVE_PATH", "models/agent_q_learning_model.json")
+    opponentModelSavePath = os.getenv("OPPONENT_MODEL_SAVE_PATH", "models/opponent_q_learning_model.json")
+    resolvedAgentModelSavePath = serverRoot / agentModelSavePath
+    resolvedOpponentModelSavePath = serverRoot / opponentModelSavePath
 
     configuration = QLearningConfiguration(
         learningRate=float(os.getenv("Q_LEARNING_RATE", "0.2")),
@@ -26,14 +29,31 @@ def create_app():
         epsilonMin=float(os.getenv("Q_EPSILON_MIN", "0.05")),
         epsilonDecay=float(os.getenv("Q_EPSILON_DECAY", "0.995")),
         maxStepsPerEpisode=int(os.getenv("Q_MAX_STEPS_PER_EPISODE", "1000")),
-        modelSavePath=modelSavePath,
+        modelSavePath=agentModelSavePath,
     )
-    q_learning_agent = QLearningAgent(configuration=configuration)
-    q_learning_agent.load(resolvedModelSavePath)
+    agentPlayer = QLearningAgent(configuration=configuration)
+    opponentAgent = QLearningAgent(
+        configuration=QLearningConfiguration(
+            learningRate=configuration.learningRate,
+            discountFactor=configuration.discountFactor,
+            epsilonStart=configuration.epsilonStart,
+            epsilonMin=configuration.epsilonMin,
+            epsilonDecay=configuration.epsilonDecay,
+            maxStepsPerEpisode=configuration.maxStepsPerEpisode,
+            modelSavePath=opponentModelSavePath,
+        )
+    )
+    multi_agent_training_service = MultiAgentTrainingService(
+        agentPlayer=agentPlayer,
+        opponentAgent=opponentAgent,
+        agentModelPath=resolvedAgentModelSavePath,
+        opponentModelPath=resolvedOpponentModelSavePath,
+    )
+    multi_agent_training_service.load_models()
 
     socketio.init_app(app)
 
     from .sockets import register_sockets
-    register_sockets(socketio, q_learning_agent, resolvedModelSavePath)
+    register_sockets(socketio, multi_agent_training_service)
 
     return app

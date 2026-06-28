@@ -7,3 +7,5 @@ __pycache__
 dist
 server_env
 models/q_learning_model.json
+models/agent_q_learning_model.json
+models/opponent_q_learning_model.json

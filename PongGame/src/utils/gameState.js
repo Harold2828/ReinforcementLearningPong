@@ -9,7 +9,17 @@ export function isValidAction(actionName) {
 }
 
 export function normalizeAgentAction(responsePayload) {
-    const actionName = responsePayload?.action ?? responsePayload?.direction;
+    const actionName = responsePayload?.agentAction ?? responsePayload?.action ?? responsePayload?.direction;
+    if (typeof actionName !== "string") {
+        return null;
+    }
+
+    const normalizedActionName = actionName.toUpperCase();
+    return isValidAction(normalizedActionName) ? normalizedActionName : null;
+}
+
+export function normalizeOpponentAction(responsePayload) {
+    const actionName = responsePayload?.opponentAction;
     if (typeof actionName !== "string") {
         return null;
     }
@@ -36,33 +46,35 @@ export function applyAgentActionToPaddle(paddle, actionName, speed = 500) {
 }
 
 export function buildQlearningState({
+    gameMode,
     width,
     height,
     ball,
     agentPaddle,
     opponentPaddle,
-    scoreAgent,
-    scoreOpponent,
-    done,
-    agentHitBall,
-    agentMissedBall,
-    agentScored,
-    previousDistanceToBall,
+    agentScore,
+    opponentScore,
+    lastHitBy,
+    pointWinner,
+    episodeId,
+    previousAgentDistanceToBall,
+    previousOpponentDistanceToBall,
 }) {
     return {
+        gameMode,
         ballX: ball.x,
         ballY: ball.y,
         ballVelocityX: ball.body?.velocity?.x ?? 0,
         ballVelocityY: ball.body?.velocity?.y ?? 0,
-        paddleY: agentPaddle.y,
+        agentPaddleY: agentPaddle.y,
         opponentPaddleY: opponentPaddle?.y,
-        scoreAgent,
-        scoreOpponent,
-        done,
-        agentHitBall,
-        agentMissedBall,
-        agentScored,
-        previousDistanceToBall,
+        agentScore,
+        opponentScore,
+        lastHitBy,
+        pointWinner,
+        episodeId,
+        previousAgentDistanceToBall,
+        previousOpponentDistanceToBall,
         width,
         height,
     };

@@ -1,7 +1,7 @@
 COMPOSE := docker compose
 PROJECT_ROOT := $(CURDIR)
 
-.PHONY: production prod clean-cache test test-backend test-frontend build-production up-production reset-backend reset-back reset-frontend reset-front status logs down
+.PHONY: production prod clean-cache test test-backend test-frontend build-production up-production reset-backend reset-back reset-frontend reset-front train-self-play reset-models status logs down
 
 production: clean-cache test build-production up-production status
 
@@ -40,6 +40,17 @@ reset-frontend:
 	$(COMPOSE) up -d --build --force-recreate frontend
 
 reset-front: reset-frontend
+
+train-self-play: up-production
+	@echo "Open http://localhost:5173 and select 'Training Self-Play' in the game mode selector."
+
+reset-models:
+	@if [ "$(CONFIRM)" != "reset" ]; then \
+		echo "This deletes saved Q-learning model volumes. Re-run with: make reset-models CONFIRM=reset"; \
+		exit 1; \
+	fi
+	$(COMPOSE) down
+	docker volume rm reinforcementlearningpong_q_learning_models || true
 
 status:
 	$(COMPOSE) ps
