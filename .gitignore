@@ -1,2 +1,5 @@
 #Computer
 .DS_Store
+Server/models/q_learning_model.json
+Server/models/agent_q_learning_model.json
+Server/models/opponent_q_learning_model.json

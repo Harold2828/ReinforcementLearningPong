@@ -219,10 +219,13 @@ class QLearningAgent:
         if self.trainingEnabled and self.randomGenerator.random() < self.epsilonValue:
             selectedAction = self.randomGenerator.choice(ALLOWED_ACTIONS)
         else:
-            selectedAction = max(
-                ALLOWED_ACTIONS,
-                key=lambda actionName: self.qTable[currentStateKey].get(actionName, 0.0),
+            bestActionValue = max(self.qTable[currentStateKey].get(actionName, 0.0) for actionName in ALLOWED_ACTIONS)
+            bestActions = tuple(
+                actionName
+                for actionName in ALLOWED_ACTIONS
+                if self.qTable[currentStateKey].get(actionName, 0.0) == bestActionValue
             )
+            selectedAction = self.randomGenerator.choice(bestActions)
 
         return selectedAction
 

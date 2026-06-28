@@ -1,7 +1,7 @@
 COMPOSE := docker compose
 PROJECT_ROOT := $(CURDIR)
 
-.PHONY: production prod clean-cache test test-backend test-frontend build-production up-production reset-backend reset-back reset-frontend reset-front train-self-play reset-models status logs down
+.PHONY: production prod clean-cache test test-backend test-frontend build-production up-production reset-backend reset-back reset-frontend reset-front pretrain train-self-play reset-models status logs down
 
 production: clean-cache test build-production up-production status
 
@@ -40,6 +40,9 @@ reset-frontend:
 	$(COMPOSE) up -d --build --force-recreate frontend
 
 reset-front: reset-frontend
+
+pretrain:
+	$(COMPOSE) run --rm --build backend python pretrain_self_play.py --episodes $${EPISODES:-500} --max-steps $${MAX_STEPS:-1000}
 
 train-self-play: up-production
 	@echo "Open http://localhost:5173 and select 'Training Self-Play' in the game mode selector."

@@ -11,6 +11,15 @@ from app.ai.q_learning_agent import (
 )
 
 
+class ChooseDownOnTieRandom:
+    def random(self):
+        return 1.0
+
+    def choice(self, actions):
+        assert set(actions) == set(ALLOWED_ACTIONS)
+        return "DOWN"
+
+
 def make_state(**overrides):
     values = {
         "ballX": 400,
@@ -118,6 +127,20 @@ def test_epsilon_greedy_selects_valid_actions_and_exploits_best_known_action():
 
     assert selectedAction == "DOWN"
     assert selectedAction in ALLOWED_ACTIONS
+
+
+def test_exploitation_breaks_ties_without_up_bias():
+    state = make_state()
+    agent = QLearningAgent(
+        QLearningConfiguration(epsilonStart=0.0, epsilonMin=0.0),
+        randomGenerator=ChooseDownOnTieRandom(),
+    )
+    stateKey = agent.discretize_state(state)
+    agent.qTable[stateKey] = {"UP": 0.0, "DOWN": 0.0, "STAY": 0.0}
+
+    selectedAction = agent.select_action(state)
+
+    assert selectedAction == "DOWN"
 
 
 def test_model_save_and_load_round_trip(tmp_path: Path):

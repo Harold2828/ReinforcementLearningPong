@@ -154,11 +154,18 @@ Useful support commands:
 
 ```bash
 make test
+make pretrain
 make train-self-play
 make reset-models CONFIRM=reset
 make status
 make logs
 make down
+```
+
+Headless pretraining runs a fast backend-only Pong environment before visual gameplay. You can tune the run length with:
+
+```bash
+EPISODES=2000 MAX_STEPS=1000 make pretrain
 ```
 
 ## Configuration

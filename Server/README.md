@@ -55,6 +55,16 @@ From the repository root:
 pytest Server/tests
 ```
 
+## Headless Pretraining
+
+Run the gym-like backend simulator without Phaser rendering:
+
+```bash
+python pretrain_self_play.py --episodes 500 --max-steps 1000
+```
+
+The script trains both Q-learning agents with the same self-play reward function used by the live game and saves the two model files.
+
 ## Docker
 
 From the repository root:
