@@ -9,6 +9,7 @@ from .q_learning_agent import ALLOWED_ACTIONS, PongState, QLearningAgent
 
 
 HUMAN_VS_AI = "HUMAN_VS_AI"
+HUMAN_VS_AI_TRAINING = "HUMAN_VS_AI_TRAINING"
 AI_VS_HUMAN = "AI_VS_HUMAN"
 AI_VS_AI = "AI_VS_AI"
 TRAINING_SELF_PLAY = "TRAINING_SELF_PLAY"
@@ -16,6 +17,7 @@ EVALUATION = "EVALUATION"
 
 SUPPORTED_GAME_MODES = (
     HUMAN_VS_AI,
+    HUMAN_VS_AI_TRAINING,
     AI_VS_HUMAN,
     AI_VS_AI,
     TRAINING_SELF_PLAY,
@@ -60,6 +62,7 @@ class MultiAgentMetrics:
     opponentHits: int = 0
     completedEpisodes: int = 0
     selfPlayEpisodes: int = 0
+    humanTrainingEpisodes: int = 0
 
     def record_step(self, state: MultiAgentGameState, agentReward: float, opponentReward: float) -> None:
         self.agentTotalReward += agentReward
@@ -76,6 +79,8 @@ class MultiAgentMetrics:
         self.completedEpisodes += 1
         if state.gameMode == TRAINING_SELF_PLAY:
             self.selfPlayEpisodes += 1
+        elif state.gameMode == HUMAN_VS_AI_TRAINING:
+            self.humanTrainingEpisodes += 1
 
         if state.pointWinner == "agent":
             self.agentWins += 1
@@ -100,6 +105,7 @@ class MultiAgentMetrics:
             "agentHitRate": self.agentHits / totalHits if totalHits else 0.0,
             "opponentHitRate": self.opponentHits / totalHits if totalHits else 0.0,
             "selfPlayEpisodes": self.selfPlayEpisodes,
+            "humanTrainingEpisodes": self.humanTrainingEpisodes,
         }
 
 
@@ -185,11 +191,13 @@ class MultiAgentTrainingService:
         opponentAgent: QLearningAgent,
         agentModelPath: Path,
         opponentModelPath: Path,
+        humanTrainingEpsilon: float = 0.1,
     ):
         self.agentPlayer = agentPlayer
         self.opponentAgent = opponentAgent
         self.agentModelPath = agentModelPath
         self.opponentModelPath = opponentModelPath
+        self.humanTrainingEpsilon = max(0.0, min(1.0, humanTrainingEpsilon))
         self.trainingEnabled = True
         self.metrics = MultiAgentMetrics()
         self._agentPreviousStateKey: str | None = None
@@ -207,8 +215,9 @@ class MultiAgentTrainingService:
 
     def process_state(self, state: MultiAgentGameState) -> dict[str, Any]:
         agentReward, opponentReward = calculate_adversarial_rewards(state)
-        learningEnabled = state.gameMode == TRAINING_SELF_PLAY and self.trainingEnabled
-        explorationEnabled = state.gameMode == TRAINING_SELF_PLAY and self.trainingEnabled
+        learningEnabled = state.gameMode in (TRAINING_SELF_PLAY, HUMAN_VS_AI_TRAINING) and self.trainingEnabled
+        explorationEnabled = learningEnabled
+        explorationEpsilon = self.humanTrainingEpsilon if state.gameMode == HUMAN_VS_AI_TRAINING else None
 
         agentAction = "STAY"
         opponentAction = "STAY"
@@ -221,6 +230,7 @@ class MultiAgentTrainingService:
                 learningEnabled,
                 explorationEnabled,
                 "agent",
+                explorationEpsilon,
             )
 
         if self._is_opponent_ai_controlled(state.gameMode):
@@ -231,12 +241,13 @@ class MultiAgentTrainingService:
                 learningEnabled,
                 explorationEnabled,
                 "opponent",
+                explorationEpsilon,
             )
 
         if state.done:
             self.metrics.record_step(state, agentReward, opponentReward)
             if learningEnabled:
-                self._finish_training_episode()
+                self._finish_training_episode(state.gameMode)
                 self.save_models()
             self.reset_episode()
         else:
@@ -252,8 +263,8 @@ class MultiAgentTrainingService:
             "mode": state.gameMode,
             "algorithm": self.algorithmName,
             "learningEnabled": learningEnabled,
-            "epsilon": self.agentPlayer.epsilonValue,
-            "opponentEpsilon": self.opponentAgent.epsilonValue,
+            "epsilon": self._effective_agent_epsilon(state.gameMode),
+            "opponentEpsilon": self.opponentAgent.epsilonValue if state.gameMode == TRAINING_SELF_PLAY else 0.0,
             "episode": self.metrics.completedEpisodes + 1,
             "metrics": self.metrics.to_dict(),
         }
@@ -275,14 +286,14 @@ class MultiAgentTrainingService:
         self._opponentPreviousAction = None
 
     def training_status(self, gameMode: str = HUMAN_VS_AI) -> dict[str, Any]:
-        learningEnabled = gameMode == TRAINING_SELF_PLAY and self.trainingEnabled
+        learningEnabled = gameMode in (TRAINING_SELF_PLAY, HUMAN_VS_AI_TRAINING) and self.trainingEnabled
         return {
             "connected": True,
             "mode": gameMode,
             "algorithm": self.algorithmName,
             "learningEnabled": learningEnabled,
-            "epsilon": self.agentPlayer.epsilonValue,
-            "opponentEpsilon": self.opponentAgent.epsilonValue,
+            "epsilon": self._effective_agent_epsilon(gameMode),
+            "opponentEpsilon": self.opponentAgent.epsilonValue if gameMode == TRAINING_SELF_PLAY else 0.0,
             "episode": self.metrics.completedEpisodes + 1,
             "metrics": self.metrics.to_dict(),
         }
@@ -295,6 +306,7 @@ class MultiAgentTrainingService:
         learningEnabled: bool,
         explorationEnabled: bool,
         role: str,
+        explorationEpsilon: float | None = None,
     ) -> str:
         stateKey = qLearningAgent.discretize_state(state)
         qLearningAgent._ensure_state_actions(stateKey)
@@ -307,7 +319,7 @@ class MultiAgentTrainingService:
 
         originalTrainingState = qLearningAgent.trainingEnabled
         qLearningAgent.trainingEnabled = explorationEnabled
-        selectedAction = qLearningAgent.select_action(state)
+        selectedAction = qLearningAgent.select_action(state, epsilonOverride=explorationEpsilon)
         qLearningAgent.trainingEnabled = originalTrainingState
 
         if role == "agent":
@@ -319,19 +331,25 @@ class MultiAgentTrainingService:
 
         return selectedAction if selectedAction in ALLOWED_ACTIONS else "STAY"
 
-    def _finish_training_episode(self) -> None:
+    def _finish_training_episode(self, gameMode: str) -> None:
         self.agentPlayer.epsilonValue = max(
             self.agentPlayer.configuration.epsilonMin,
             self.agentPlayer.epsilonValue * self.agentPlayer.configuration.epsilonDecay,
         )
-        self.opponentAgent.epsilonValue = max(
-            self.opponentAgent.configuration.epsilonMin,
-            self.opponentAgent.epsilonValue * self.opponentAgent.configuration.epsilonDecay,
-        )
+        if gameMode == TRAINING_SELF_PLAY:
+            self.opponentAgent.epsilonValue = max(
+                self.opponentAgent.configuration.epsilonMin,
+                self.opponentAgent.epsilonValue * self.opponentAgent.configuration.epsilonDecay,
+            )
+
+    def _effective_agent_epsilon(self, gameMode: str) -> float:
+        if gameMode == HUMAN_VS_AI_TRAINING:
+            return min(self.agentPlayer.epsilonValue, self.humanTrainingEpsilon)
+        return self.agentPlayer.epsilonValue
 
     @staticmethod
     def _is_agent_ai_controlled(gameMode: str) -> bool:
-        return gameMode in (HUMAN_VS_AI, AI_VS_AI, TRAINING_SELF_PLAY, EVALUATION)
+        return gameMode in (HUMAN_VS_AI, HUMAN_VS_AI_TRAINING, AI_VS_AI, TRAINING_SELF_PLAY, EVALUATION)
 
     @staticmethod
     def _is_opponent_ai_controlled(gameMode: str) -> bool:

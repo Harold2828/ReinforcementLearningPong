@@ -2,6 +2,7 @@ from pathlib import Path
 
 from app.ai.multi_agent_training_service import (
     EVALUATION,
+    HUMAN_VS_AI_TRAINING,
     TRAINING_SELF_PLAY,
     MultiAgentGameState,
     MultiAgentTrainingService,
@@ -103,3 +104,27 @@ def test_evaluation_mode_does_not_update_q_tables(tmp_path):
 
     assert all(value == 0 for actions in service.agentPlayer.qTable.values() for value in actions.values())
     assert all(value == 0 for actions in service.opponentAgent.qTable.values() for value in actions.values())
+
+
+def test_human_training_updates_only_ai_and_uses_reduced_exploration(tmp_path):
+    configuration = QLearningConfiguration(epsilonStart=1.0, epsilonMin=0.0)
+    service = MultiAgentTrainingService(
+        agentPlayer=QLearningAgent(configuration),
+        opponentAgent=QLearningAgent(configuration),
+        agentModelPath=tmp_path / "agent.json",
+        opponentModelPath=tmp_path / "opponent.json",
+        humanTrainingEpsilon=0.1,
+    )
+
+    service.process_state(make_state(gameMode=HUMAN_VS_AI_TRAINING))
+    response = service.process_state(
+        make_state(gameMode=HUMAN_VS_AI_TRAINING, ballY=320, pointWinner="agent")
+    )
+
+    assert response["learningEnabled"] is True
+    assert response["opponentAction"] == "STAY"
+    assert response["epsilon"] <= 0.1
+    assert response["opponentEpsilon"] == 0.0
+    assert response["metrics"]["humanTrainingEpisodes"] == 1
+    assert service.agentPlayer.qTable
+    assert service.opponentAgent.qTable == {}

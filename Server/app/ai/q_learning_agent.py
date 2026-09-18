@@ -212,11 +212,14 @@ class QLearningAgent:
             )
         )
 
-    def select_action(self, currentState: PongState) -> str:
+    def select_action(self, currentState: PongState, epsilonOverride: float | None = None) -> str:
         currentStateKey = self.discretize_state(currentState)
         self._ensure_state_actions(currentStateKey)
 
-        if self.trainingEnabled and self.randomGenerator.random() < self.epsilonValue:
+        explorationRate = self.epsilonValue if epsilonOverride is None else min(
+            self.epsilonValue, max(0.0, min(1.0, epsilonOverride))
+        )
+        if self.trainingEnabled and self.randomGenerator.random() < explorationRate:
             selectedAction = self.randomGenerator.choice(ALLOWED_ACTIONS)
         else:
             bestActionValue = max(self.qTable[currentStateKey].get(actionName, 0.0) for actionName in ALLOWED_ACTIONS)

@@ -7,19 +7,20 @@ The backend exposes a Flask-SocketIO service with either two tabular agents or a
 - Validate game state payloads from the PhaserJS frontend.
 - Validate the multi-agent game mode and state payload.
 - Select valid actions for both sides: `UP`, `DOWN`, or `STAY`.
-- Apply Q-learning updates with epsilon-greedy exploration during `TRAINING_SELF_PLAY`.
+- Apply reinforcement-learning updates during self-play or opt-in human-vs-AI training.
 - Calculate adversarial rewards for scoring, hits, combo-smash rallies, incoming-ball alignment, pressure, and survival.
 - Save and load separate Q-table progress from `models/agent_q_learning_model.json` and `models/opponent_q_learning_model.json`.
 - Emit training status, state errors, dual action responses, and self-play metrics.
 
 ## Game Modes
 
-| Mode | Agent Paddle | Opponent Paddle | Learning |
+| Mode | Left Paddle | Right Paddle | Learning |
 |---|---|---|---|
 | `HUMAN_VS_AI` | Human | AI | Off |
+| `HUMAN_VS_AI_TRAINING` | Human | AI | AI only |
 | `AI_VS_HUMAN` | AI | Human | Off |
 | `AI_VS_AI` | AI | AI | Off |
-| `TRAINING_SELF_PLAY` | AI | AI | On |
+| `TRAINING_SELF_PLAY` | AI | AI | Both sides |
 | `EVALUATION` | AI | AI | Off |
 
 ## WebSocket Events
@@ -87,6 +88,7 @@ Choose the implementation with `RL_ALGORITHM=dqn` or `RL_ALGORITHM=tabular`. Neu
 | `Q_EPSILON_MIN` | Minimum exploration rate. |
 | `Q_EPSILON_DECAY` | Epsilon multiplier applied after completed episodes. |
 | `Q_MAX_STEPS_PER_EPISODE` | Safety limit for episode length. |
+| `HUMAN_TRAINING_EPSILON` | Maximum exploration rate while learning from a human; defaults to `0.1`. |
 
 ## Model Persistence
 

@@ -115,3 +115,29 @@ def test_dqn_mode_uses_neural_service_and_saves_checkpoint(monkeypatch, tmp_path
     assert terminalResponse["replaySize"] == 2
     assert terminalResponse["episode"] == 2
     assert checkpoint.exists()
+
+
+def test_human_vs_ai_training_learns_only_for_ai_paddle(monkeypatch, tmp_path):
+    checkpoint = tmp_path / "human_training.pt"
+    monkeypatch.setenv("RL_ALGORITHM", "dqn")
+    monkeypatch.setenv("DQN_MODEL_SAVE_PATH", str(checkpoint))
+    monkeypatch.setenv("DQN_REPLAY_CAPACITY", "20")
+    monkeypatch.setenv("DQN_REPLAY_WARMUP", "20")
+    monkeypatch.setenv("DQN_BATCH_SIZE", "2")
+    monkeypatch.setenv("HUMAN_TRAINING_EPSILON", "0.1")
+    app = create_app()
+    client = socketio.test_client(app)
+    payload = valid_state_payload()
+    payload["gameMode"] = "HUMAN_VS_AI_TRAINING"
+
+    client.emit("state_update", payload, callback=True)
+    payload["pointWinner"] = "agent"
+    payload["agentScore"] = 1
+    response = client.emit("state_update", payload, callback=True)
+
+    assert response["learningEnabled"] is True
+    assert response["opponentAction"] == "STAY"
+    assert response["replaySize"] == 1
+    assert response["epsilon"] <= 0.1
+    assert response["metrics"]["humanTrainingEpisodes"] == 1
+    assert checkpoint.exists()

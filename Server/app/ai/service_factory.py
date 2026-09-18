@@ -29,6 +29,7 @@ def create_training_service(serverRoot: Path, randomSeed: int | None = None):
         service = NeuralTrainingService(
             DQNAgent(configuration=configuration, randomGenerator=random.Random(randomSeed)),
             modelPath,
+            humanTrainingEpsilon=float(os.getenv("HUMAN_TRAINING_EPSILON", "0.1")),
         )
         service.load_models()
         return service
@@ -51,6 +52,7 @@ def create_training_service(serverRoot: Path, randomSeed: int | None = None):
         opponentAgent=QLearningAgent(configuration, random.Random(None if randomSeed is None else randomSeed + 1)),
         agentModelPath=agentPath,
         opponentModelPath=opponentPath,
+        humanTrainingEpsilon=float(os.getenv("HUMAN_TRAINING_EPSILON", "0.1")),
     )
     service.load_models()
     return service

@@ -408,6 +408,7 @@ class BasicGame extends Phaser.Scene {
             agentHitRate: Number(metrics.agentHitRate ?? 0),
             opponentHitRate: Number(metrics.opponentHitRate ?? 0),
             selfPlayEpisodes: Number(metrics.selfPlayEpisodes ?? 0),
+            humanTrainingEpisodes: Number(metrics.humanTrainingEpisodes ?? 0),
         });
     }
 

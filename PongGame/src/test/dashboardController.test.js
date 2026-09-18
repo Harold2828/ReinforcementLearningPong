@@ -21,6 +21,7 @@ function renderDashboard() {
         <strong data-ui="agent-metrics"></strong>
         <strong data-ui="opponent-metrics"></strong>
         <strong data-ui="self-play-episodes"></strong>
+        <strong data-ui="human-training-episodes"></strong>
         <strong data-ui="neural-metrics"></strong>
         <strong data-ui="feedback"></strong>
         <button data-action="start-training"></button>
@@ -55,6 +56,7 @@ describe("DashboardController", () => {
             agentHitRate: 0.8,
             opponentHitRate: 0.4,
             selfPlayEpisodes: 8,
+            humanTrainingEpisodes: 3,
             replaySize: 5000,
             trainingSteps: 42,
             trainingLoss: 0.01234,
@@ -75,6 +77,7 @@ describe("DashboardController", () => {
         expect(document.querySelector("[data-ui='agent-metrics']").textContent).toBe("Win 75% | Hit 80% | Avg 2.20");
         expect(document.querySelector("[data-ui='opponent-metrics']").textContent).toBe("Win 25% | Hit 40% | Avg -1.20");
         expect(document.querySelector("[data-ui='self-play-episodes']").textContent).toBe("8");
+        expect(document.querySelector("[data-ui='human-training-episodes']").textContent).toBe("3");
         expect(document.querySelector("[data-ui='neural-metrics']").textContent).toBe("Replay 5000 | Steps 42 | Loss 0.0123");
         expect(document.querySelector("[data-ui='feedback']").textContent).toBe("Agent hit the ball");
     });

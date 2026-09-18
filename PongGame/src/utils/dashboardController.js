@@ -19,6 +19,7 @@ const DEFAULT_DASHBOARD_STATE = {
     agentHitRate: 0,
     opponentHitRate: 0,
     selfPlayEpisodes: 0,
+    humanTrainingEpisodes: 0,
     replaySize: 0,
     trainingSteps: 0,
     trainingLoss: null,
@@ -45,6 +46,7 @@ export class DashboardController {
             agentMetrics: this.document.querySelector("[data-ui='agent-metrics']"),
             opponentMetrics: this.document.querySelector("[data-ui='opponent-metrics']"),
             selfPlayEpisodes: this.document.querySelector("[data-ui='self-play-episodes']"),
+            humanTrainingEpisodes: this.document.querySelector("[data-ui='human-training-episodes']"),
             neuralMetrics: this.document.querySelector("[data-ui='neural-metrics']"),
             feedback: this.document.querySelector("[data-ui='feedback']"),
             startButton: this.document.querySelector("[data-action='start-training']"),
@@ -86,6 +88,7 @@ export class DashboardController {
             `Win ${(state.opponentWinRate * 100).toFixed(0)}% | Hit ${(state.opponentHitRate * 100).toFixed(0)}% | Avg ${Number(state.opponentAverageReward).toFixed(2)}`,
         );
         this.setText("selfPlayEpisodes", String(state.selfPlayEpisodes));
+        this.setText("humanTrainingEpisodes", String(state.humanTrainingEpisodes));
         const loss = state.trainingLoss == null ? "—" : Number(state.trainingLoss).toFixed(4);
         this.setText("neuralMetrics", `Replay ${state.replaySize} | Steps ${state.trainingSteps} | Loss ${loss}`);
         this.setText("feedback", state.feedback);

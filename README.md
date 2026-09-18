@@ -16,6 +16,7 @@ This project combines a PhaserJS Pong game with a Flask-SocketIO backend and con
 | Mode | Left Paddle | Right Paddle | Learning |
 |---|---|---|---|
 | `Human vs AI` | Human | AI Agent | Disabled |
+| `Human vs AI Training` | Human | AI Agent | Enabled for AI only |
 | `AI vs Human` | AI Opponent | Human | Disabled |
 | `AI vs AI` | AI Opponent | AI Agent | Disabled |
 | `Training Self-Play` | AI Opponent | AI Agent | Enabled |
@@ -54,7 +55,7 @@ The adversarial Q-learning reward function uses:
 | Paddle moves closer to incoming ball | positive alignment reward | positive alignment reward |
 | Episode survives one step | small survival reward | small survival reward |
 
-Terminal point updates do not bootstrap from the next state, and self-play episodes decay epsilon after the point is completed. Metrics tracked per completed episode include agent/opponent win rate, average reward, hit rate, self-play episodes, and epsilon values.
+Terminal point updates do not bootstrap from the next state, and training episodes decay epsilon after the point is completed. Metrics tracked per completed episode include agent/opponent win rate, average reward, hit rate, self-play episodes, human-training episodes, and epsilon values.
 
 ## Run Locally
 
@@ -184,6 +185,7 @@ Q-learning and neural configuration are read from environment variables:
 | `Q_EPSILON_MIN` | `0.05` |
 | `Q_EPSILON_DECAY` | `0.995` |
 | `Q_MAX_STEPS_PER_EPISODE` | `1000` |
+| `HUMAN_TRAINING_EPSILON` | `0.1` |
 | `DQN_MODEL_SAVE_PATH` | `models/dqn_self_play.pt` |
 | `DQN_REPLAY_CAPACITY` | `100000` |
 | `DQN_REPLAY_WARMUP` | `5000` |
@@ -194,6 +196,8 @@ Q-learning and neural configuration are read from environment variables:
 | `DQN_TARGET_UPDATE_INTERVAL` | `1000` |
 
 The DQN consumes normalized structured state rather than pixels. Both paddle perspectives are mirrored into one shared policy, and its checkpoint includes online/target weights, optimizer state, epsilon progress, and training steps.
+
+In `HUMAN_VS_AI_TRAINING`, the human controls the left paddle and only the right AI policy learns. Exploration is capped by `HUMAN_TRAINING_EPSILON` so human-facing play remains reasonably competitive. Normal `HUMAN_VS_AI` never modifies the model.
 
 ## Troubleshooting
 

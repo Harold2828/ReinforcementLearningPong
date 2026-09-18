@@ -28,7 +28,7 @@ VITE_BACKEND_URL=http://localhost:5001 npm run dev
 
 | Control | Purpose |
 |---|---|
-| Game mode selector | Switches between `HUMAN_VS_AI`, `AI_VS_HUMAN`, `AI_VS_AI`, `TRAINING_SELF_PLAY`, and `EVALUATION`. |
+| Game mode selector | Switches between normal play, `HUMAN_VS_AI_TRAINING`, AI self-play, and evaluation modes. |
 | Start training | Sends `start_training` and resumes backend action requests. |
 | Stop training | Sends `stop_training` and pauses training state updates. |
 | Reset episode | Resets scores, ball state, episode flags, and backend episode state. |
@@ -46,7 +46,7 @@ The dashboard shows:
 - Latest agent and opponent reward values.
 - Current agent and opponent epsilon values.
 - Current score.
-- Agent/opponent win rates, average rewards, hit rates, and self-play episode count.
+- Agent/opponent win rates, average rewards, hit rates, self-play episodes, and human-training episodes.
 - Hit and connection feedback.
 
 ## Tests

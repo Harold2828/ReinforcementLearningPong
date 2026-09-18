@@ -72,6 +72,12 @@ describe("gameState helpers", () => {
 
         expect(manager.isOpponentHumanControlled()).toBe(true);
         expect(manager.isAgentAiControlled()).toBe(true);
+
+        manager.setMode(GAME_MODES.HUMAN_VS_AI_TRAINING);
+
+        expect(manager.isOpponentHumanControlled()).toBe(true);
+        expect(manager.isAgentAiControlled()).toBe(true);
+        expect(manager.isLearningEnabled()).toBe(true);
     });
 
     it("awards a point to the paddle opposite the crossed boundary", () => {

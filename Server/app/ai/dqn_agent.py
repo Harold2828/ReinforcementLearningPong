@@ -187,12 +187,20 @@ class DQNAgent:
     def epsilonValue(self) -> float:
         return self.epsilon()
 
-    def select_action(self, state: np.ndarray, explore: bool = True) -> int:
+    def select_action(
+        self,
+        state: np.ndarray,
+        explore: bool = True,
+        epsilonOverride: float | None = None,
+    ) -> int:
         if state.shape != (self.state_dim,):
             raise ValueError(f"Expected state shape ({self.state_dim},), received {state.shape}.")
         if explore and self.trainingEnabled:
             self.total_steps += 1
-            if self.randomGenerator.random() < self.epsilon():
+            explorationRate = self.epsilon() if epsilonOverride is None else min(
+                self.epsilon(), max(0.0, min(1.0, epsilonOverride))
+            )
+            if self.randomGenerator.random() < explorationRate:
                 return self.randomGenerator.randrange(self.num_actions)
         stateTensor = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
         with torch.no_grad():
