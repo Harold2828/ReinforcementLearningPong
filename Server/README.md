@@ -1,6 +1,6 @@
 # Backend Server
 
-The backend exposes a Flask-SocketIO service for the Pong game and hosts two independent tabular Q-learning agents for human play, evaluation, AI-vs-AI play, and self-play training.
+The backend exposes a Flask-SocketIO service with either two tabular agents or a shared Dueling Double DQN neural policy for human play, evaluation, AI-vs-AI play, and self-play training.
 
 ## Responsibilities
 
@@ -74,6 +74,8 @@ docker compose up --build backend
 ```
 
 ## Configuration
+
+Choose the implementation with `RL_ALGORITHM=dqn` or `RL_ALGORITHM=tabular`. Neural mode stores a resumable checkpoint at `DQN_MODEL_SAVE_PATH` and reports replay size, training loss, and training-step diagnostics to the frontend.
 
 | Variable | Description |
 |---|---|

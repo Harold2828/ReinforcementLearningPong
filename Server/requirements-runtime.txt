@@ -1,3 +1,5 @@
 Flask
 Flask-SocketIO
 eventlet
+numpy
+torch

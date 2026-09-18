@@ -5,9 +5,8 @@ import os
 from pathlib import Path
 import random
 
-from app.ai.multi_agent_training_service import MultiAgentTrainingService
 from app.ai.pong_training_env import PongTrainingEnv, PongTrainingEnvConfig
-from app.ai.q_learning_agent import QLearningAgent, QLearningConfiguration
+from app.ai.service_factory import create_training_service
 
 
 def main() -> None:
@@ -23,17 +22,7 @@ def main() -> None:
         raise ValueError("--max-steps must be greater than zero.")
 
     serverRoot = Path(__file__).resolve().parent
-    agentModelPath = _resolve_model_path(serverRoot, os.getenv("AGENT_MODEL_SAVE_PATH", "models/agent_q_learning_model.json"))
-    opponentModelPath = _resolve_model_path(serverRoot, os.getenv("OPPONENT_MODEL_SAVE_PATH", "models/opponent_q_learning_model.json"))
-
-    configuration = _configuration()
-    service = MultiAgentTrainingService(
-        agentPlayer=QLearningAgent(configuration=configuration, randomGenerator=random.Random(args.seed)),
-        opponentAgent=QLearningAgent(configuration=configuration, randomGenerator=random.Random(args.seed + 1)),
-        agentModelPath=agentModelPath,
-        opponentModelPath=opponentModelPath,
-    )
-    service.load_models()
+    service = create_training_service(serverRoot, randomSeed=args.seed)
 
     env = PongTrainingEnv(
         PongTrainingEnvConfig(maxStepsPerEpisode=args.max_steps),
@@ -70,24 +59,7 @@ def main() -> None:
             )
 
     service.save_models()
-    print(f"saved agent model: {agentModelPath}")
-    print(f"saved opponent model: {opponentModelPath}")
-
-
-def _configuration() -> QLearningConfiguration:
-    return QLearningConfiguration(
-        learningRate=float(os.getenv("Q_LEARNING_RATE", "0.2")),
-        discountFactor=float(os.getenv("Q_DISCOUNT_FACTOR", "0.95")),
-        epsilonStart=float(os.getenv("Q_EPSILON_START", "1.0")),
-        epsilonMin=float(os.getenv("Q_EPSILON_MIN", "0.05")),
-        epsilonDecay=float(os.getenv("Q_EPSILON_DECAY", "0.995")),
-        maxStepsPerEpisode=int(os.getenv("Q_MAX_STEPS_PER_EPISODE", "1000")),
-    )
-
-
-def _resolve_model_path(serverRoot: Path, modelPath: str) -> Path:
-    path = Path(modelPath)
-    return path if path.is_absolute() else serverRoot / path
+    print(f"saved {service.algorithmName} model checkpoint(s)")
 
 
 if __name__ == "__main__":

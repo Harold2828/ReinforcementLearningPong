@@ -5,6 +5,7 @@ import {
     buildQlearningState,
     normalizeAgentAction,
     normalizeOpponentAction,
+    pointWinnerForBoundary,
 } from "../utils/gameState";
 import { GAME_MODES, GameModeManager } from "../utils/gameModeManager";
 
@@ -71,5 +72,11 @@ describe("gameState helpers", () => {
 
         expect(manager.isOpponentHumanControlled()).toBe(true);
         expect(manager.isAgentAiControlled()).toBe(true);
+    });
+
+    it("awards a point to the paddle opposite the crossed boundary", () => {
+        expect(pointWinnerForBoundary({ left: true })).toBe("agent");
+        expect(pointWinnerForBoundary({ right: true })).toBe("opponent");
+        expect(pointWinnerForBoundary({ up: true })).toBeNull();
     });
 });

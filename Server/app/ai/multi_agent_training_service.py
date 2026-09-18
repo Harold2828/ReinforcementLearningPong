@@ -177,6 +177,8 @@ def calculate_adversarial_rewards(state: MultiAgentGameState) -> tuple[float, fl
 
 
 class MultiAgentTrainingService:
+    algorithmName = "tabular_q_learning"
+
     def __init__(
         self,
         agentPlayer: QLearningAgent,
@@ -248,9 +250,11 @@ class MultiAgentTrainingService:
             "agentReward": agentReward,
             "opponentReward": opponentReward,
             "mode": state.gameMode,
+            "algorithm": self.algorithmName,
             "learningEnabled": learningEnabled,
             "epsilon": self.agentPlayer.epsilonValue,
             "opponentEpsilon": self.opponentAgent.epsilonValue,
+            "episode": self.metrics.completedEpisodes + 1,
             "metrics": self.metrics.to_dict(),
         }
 
@@ -275,9 +279,11 @@ class MultiAgentTrainingService:
         return {
             "connected": True,
             "mode": gameMode,
+            "algorithm": self.algorithmName,
             "learningEnabled": learningEnabled,
             "epsilon": self.agentPlayer.epsilonValue,
             "opponentEpsilon": self.opponentAgent.epsilonValue,
+            "episode": self.metrics.completedEpisodes + 1,
             "metrics": self.metrics.to_dict(),
         }
 

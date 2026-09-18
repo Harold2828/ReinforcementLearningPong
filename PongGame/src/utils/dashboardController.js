@@ -11,6 +11,7 @@ const DEFAULT_DASHBOARD_STATE = {
     agentOwner: "AI Agent",
     opponentOwner: "Human",
     learningEnabled: false,
+    algorithm: "tabular_q_learning",
     agentWinRate: 0,
     opponentWinRate: 0,
     agentAverageReward: 0,
@@ -18,6 +19,9 @@ const DEFAULT_DASHBOARD_STATE = {
     agentHitRate: 0,
     opponentHitRate: 0,
     selfPlayEpisodes: 0,
+    replaySize: 0,
+    trainingSteps: 0,
+    trainingLoss: null,
     feedback: "Ready",
 };
 
@@ -37,9 +41,11 @@ export class DashboardController {
             score: this.document.querySelector("[data-ui='score']"),
             ownership: this.document.querySelector("[data-ui='ownership']"),
             learningStatus: this.document.querySelector("[data-ui='learning-status']"),
+            algorithm: this.document.querySelector("[data-ui='algorithm']"),
             agentMetrics: this.document.querySelector("[data-ui='agent-metrics']"),
             opponentMetrics: this.document.querySelector("[data-ui='opponent-metrics']"),
             selfPlayEpisodes: this.document.querySelector("[data-ui='self-play-episodes']"),
+            neuralMetrics: this.document.querySelector("[data-ui='neural-metrics']"),
             feedback: this.document.querySelector("[data-ui='feedback']"),
             startButton: this.document.querySelector("[data-action='start-training']"),
             stopButton: this.document.querySelector("[data-action='stop-training']"),
@@ -70,6 +76,7 @@ export class DashboardController {
         this.setText("score", `${state.scoreAgent} - ${state.scoreOpponent}`);
         this.setText("ownership", `Left: ${state.opponentOwner} | Right: ${state.agentOwner}`);
         this.setText("learningStatus", state.learningEnabled ? "Learning enabled" : "Learning disabled");
+        this.setText("algorithm", state.algorithm);
         this.setText(
             "agentMetrics",
             `Win ${(state.agentWinRate * 100).toFixed(0)}% | Hit ${(state.agentHitRate * 100).toFixed(0)}% | Avg ${Number(state.agentAverageReward).toFixed(2)}`,
@@ -79,6 +86,8 @@ export class DashboardController {
             `Win ${(state.opponentWinRate * 100).toFixed(0)}% | Hit ${(state.opponentHitRate * 100).toFixed(0)}% | Avg ${Number(state.opponentAverageReward).toFixed(2)}`,
         );
         this.setText("selfPlayEpisodes", String(state.selfPlayEpisodes));
+        const loss = state.trainingLoss == null ? "—" : Number(state.trainingLoss).toFixed(4);
+        this.setText("neuralMetrics", `Replay ${state.replaySize} | Steps ${state.trainingSteps} | Loss ${loss}`);
         this.setText("feedback", state.feedback);
     }
 

@@ -17,9 +17,11 @@ function renderDashboard() {
         <strong data-ui="score"></strong>
         <strong data-ui="ownership"></strong>
         <strong data-ui="learning-status"></strong>
+        <strong data-ui="algorithm"></strong>
         <strong data-ui="agent-metrics"></strong>
         <strong data-ui="opponent-metrics"></strong>
         <strong data-ui="self-play-episodes"></strong>
+        <strong data-ui="neural-metrics"></strong>
         <strong data-ui="feedback"></strong>
         <button data-action="start-training"></button>
         <button data-action="stop-training"></button>
@@ -45,6 +47,7 @@ describe("DashboardController", () => {
             agentOwner: "AI Agent",
             opponentOwner: "AI Opponent",
             learningEnabled: true,
+            algorithm: "dueling_double_dqn",
             agentWinRate: 0.75,
             opponentWinRate: 0.25,
             agentAverageReward: 2.2,
@@ -52,6 +55,9 @@ describe("DashboardController", () => {
             agentHitRate: 0.8,
             opponentHitRate: 0.4,
             selfPlayEpisodes: 8,
+            replaySize: 5000,
+            trainingSteps: 42,
+            trainingLoss: 0.01234,
             feedback: "Agent hit the ball",
         });
 
@@ -65,9 +71,11 @@ describe("DashboardController", () => {
         expect(document.querySelector("[data-ui='score']").textContent).toBe("2 - 1");
         expect(document.querySelector("[data-ui='ownership']").textContent).toBe("Left: AI Opponent | Right: AI Agent");
         expect(document.querySelector("[data-ui='learning-status']").textContent).toBe("Learning enabled");
+        expect(document.querySelector("[data-ui='algorithm']").textContent).toBe("dueling_double_dqn");
         expect(document.querySelector("[data-ui='agent-metrics']").textContent).toBe("Win 75% | Hit 80% | Avg 2.20");
         expect(document.querySelector("[data-ui='opponent-metrics']").textContent).toBe("Win 25% | Hit 40% | Avg -1.20");
         expect(document.querySelector("[data-ui='self-play-episodes']").textContent).toBe("8");
+        expect(document.querySelector("[data-ui='neural-metrics']").textContent).toBe("Replay 5000 | Steps 42 | Loss 0.0123");
         expect(document.querySelector("[data-ui='feedback']").textContent).toBe("Agent hit the ball");
     });
 

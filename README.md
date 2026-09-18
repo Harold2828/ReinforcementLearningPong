@@ -1,6 +1,6 @@
 # Reinforcement Learning Pong
 
-This project combines a PhaserJS Pong game with a Flask-SocketIO backend and tabular Q-learning agents. The game sends structured state updates to the backend, the backend selects valid paddle actions, and training metrics make gameplay improvement measurable over time. The current training flow supports competitive self-play with two independent Q-learning agents.
+This project combines a PhaserJS Pong game with a Flask-SocketIO backend and configurable reinforcement-learning agents. It supports the original independent tabular Q-learning agents and a shared Dueling Double DQN neural policy with replay memory and target-network training.
 
 ## Project Structure
 
@@ -170,7 +170,9 @@ EPISODES=2000 MAX_STEPS=1000 make pretrain
 
 ## Configuration
 
-Q-learning configuration is read from environment variables:
+Set `RL_ALGORITHM=dqn` for neural training or `RL_ALGORITHM=tabular` for the original Q-learning implementation. Docker uses the neural mode from `.env.example` by default.
+
+Q-learning and neural configuration are read from environment variables:
 
 | Variable | Default |
 |---|---:|
@@ -182,6 +184,16 @@ Q-learning configuration is read from environment variables:
 | `Q_EPSILON_MIN` | `0.05` |
 | `Q_EPSILON_DECAY` | `0.995` |
 | `Q_MAX_STEPS_PER_EPISODE` | `1000` |
+| `DQN_MODEL_SAVE_PATH` | `models/dqn_self_play.pt` |
+| `DQN_REPLAY_CAPACITY` | `100000` |
+| `DQN_REPLAY_WARMUP` | `5000` |
+| `DQN_BATCH_SIZE` | `64` |
+| `DQN_LEARNING_RATE` | `0.0001` |
+| `DQN_DISCOUNT_FACTOR` | `0.99` |
+| `DQN_EPSILON_DECAY_STEPS` | `100000` |
+| `DQN_TARGET_UPDATE_INTERVAL` | `1000` |
+
+The DQN consumes normalized structured state rather than pixels. Both paddle perspectives are mirrored into one shared policy, and its checkpoint includes online/target weights, optimizer state, epsilon progress, and training steps.
 
 ## Troubleshooting
 

@@ -5,17 +5,13 @@ from typing import Any
 
 from flask_socketio import emit
 
-from .ai.multi_agent_training_service import (
-    HUMAN_VS_AI,
-    MultiAgentTrainingService,
-    validate_multi_agent_state,
-)
+from .ai.multi_agent_training_service import HUMAN_VS_AI, validate_multi_agent_state
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-def register_sockets(socketio, trainingService: MultiAgentTrainingService) -> None:
+def register_sockets(socketio, trainingService) -> None:
     @socketio.on("connect")
     def on_connect():
         emit("training_status", trainingService.training_status())
@@ -31,7 +27,7 @@ def register_sockets(socketio, trainingService: MultiAgentTrainingService) -> No
             responsePayload = trainingService.process_state(currentState)
             emit("ai_move", responsePayload)
             return responsePayload
-        except ValueError as error:
+        except (TypeError, ValueError) as error:
             LOGGER.warning("Invalid multi-agent state payload rejected: %s", error)
             errorPayload = {"message": str(error)}
             emit("state_error", errorPayload)

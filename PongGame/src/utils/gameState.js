@@ -45,6 +45,12 @@ export function applyAgentActionToPaddle(paddle, actionName, speed = 500) {
     return true;
 }
 
+export function pointWinnerForBoundary({ left = false, right = false }) {
+    if (left) return "agent";
+    if (right) return "opponent";
+    return null;
+}
+
 export function buildQlearningState({
     gameMode,
     width,

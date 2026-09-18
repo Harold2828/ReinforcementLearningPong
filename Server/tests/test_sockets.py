@@ -92,3 +92,26 @@ def test_training_self_play_saves_separate_models(monkeypatch, tmp_path):
     assert response["learningEnabled"] is True
     assert agentModelPath.exists()
     assert opponentModelPath.exists()
+
+
+def test_dqn_mode_uses_neural_service_and_saves_checkpoint(monkeypatch, tmp_path):
+    checkpoint = tmp_path / "dqn_self_play.pt"
+    monkeypatch.setenv("RL_ALGORITHM", "dqn")
+    monkeypatch.setenv("DQN_MODEL_SAVE_PATH", str(checkpoint))
+    monkeypatch.setenv("DQN_REPLAY_CAPACITY", "20")
+    monkeypatch.setenv("DQN_REPLAY_WARMUP", "2")
+    monkeypatch.setenv("DQN_BATCH_SIZE", "2")
+    app = create_app()
+    client = socketio.test_client(app)
+    payload = valid_state_payload()
+    payload["gameMode"] = "TRAINING_SELF_PLAY"
+
+    firstResponse = client.emit("state_update", payload, callback=True)
+    payload["pointWinner"] = "agent"
+    payload["agentScore"] = 1
+    terminalResponse = client.emit("state_update", payload, callback=True)
+
+    assert firstResponse["algorithm"] == "dueling_double_dqn"
+    assert terminalResponse["replaySize"] == 2
+    assert terminalResponse["episode"] == 2
+    assert checkpoint.exists()

@@ -8,6 +8,7 @@ import {
     buildQlearningState,
     normalizeAgentAction,
     normalizeOpponentAction,
+    pointWinnerForBoundary,
 } from "../utils/gameState";
 import { GameModeManager } from "../utils/gameModeManager";
 
@@ -58,7 +59,12 @@ class BasicGame extends Phaser.Scene {
         this.latestOpponentReward = 0;
         this.latestEpsilon = 0;
         this.latestOpponentEpsilon = 0;
+        this.algorithm = "tabular_q_learning";
+        this.replaySize = 0;
+        this.trainingSteps = 0;
+        this.trainingLoss = null;
         this.currentEpisode = 1;
+        this.awaitingAiMove = false;
     }
 
     preload() {
@@ -99,6 +105,7 @@ class BasicGame extends Phaser.Scene {
         this.actors.players[0].racket.setVelocityY(0);
         this.actors.players[1].racket.setVelocityY(0);
 
+        let stateWasSent = false;
         if (this.trainingActive) {
             if (this.gameModeManager.isAgentAiControlled()) {
                 applyAgentActionToPaddle(this.actors.players[0].racket, this.pendingAgentAction);
@@ -107,14 +114,16 @@ class BasicGame extends Phaser.Scene {
                 applyAgentActionToPaddle(this.actors.players[1].racket, this.pendingOpponentAction);
             }
             this.handleHumanControlsByMode();
-            this.sendTrainingState();
+            stateWasSent = this.sendTrainingState();
         } else {
             this.handleHumanControlsByMode();
         }
 
         this.updateScoreText();
         this.updateDashboard();
-        this.resetTransientEvents();
+        if (stateWasSent || !this.trainingActive) {
+            this.resetTransientEvents();
+        }
     }
 
     handleHumanControlsByMode() {
@@ -131,6 +140,9 @@ class BasicGame extends Phaser.Scene {
         this.socketManager = new SocketManager(backendUrl);
 
         this.socketManager.onConnectionChange((isConnected) => {
+            if (!isConnected) {
+                this.awaitingAiMove = false;
+            }
             this.dashboardController.update({
                 connected: isConnected,
                 mode: this.gameModeManager.getModeLabel(),
@@ -139,6 +151,7 @@ class BasicGame extends Phaser.Scene {
         });
 
         this.socketManager.onAiMove((payload) => {
+            this.awaitingAiMove = false;
             const selectedAction = normalizeAgentAction(payload);
             const selectedOpponentAction = normalizeOpponentAction(payload);
             if (selectedAction) {
@@ -155,6 +168,10 @@ class BasicGame extends Phaser.Scene {
             this.latestOpponentReward = Number(payload.opponentReward ?? this.latestOpponentReward);
             this.latestEpsilon = Number(payload.epsilon ?? this.latestEpsilon);
             this.latestOpponentEpsilon = Number(payload.opponentEpsilon ?? this.latestOpponentEpsilon);
+            this.algorithm = payload.algorithm ?? this.algorithm;
+            this.replaySize = Number(payload.replaySize ?? this.replaySize);
+            this.trainingSteps = Number(payload.trainingSteps ?? this.trainingSteps);
+            this.trainingLoss = payload.trainingLoss ?? this.trainingLoss;
             this.currentEpisode = Number(payload.episode ?? this.currentEpisode);
             this.updateMetrics(payload.metrics);
         });
@@ -162,6 +179,11 @@ class BasicGame extends Phaser.Scene {
         this.socketManager.onTrainingStatus((payload) => {
             this.currentEpisode = Number(payload.episode ?? this.currentEpisode);
             this.latestEpsilon = Number(payload.epsilon ?? this.latestEpsilon);
+            this.latestOpponentEpsilon = Number(payload.opponentEpsilon ?? this.latestOpponentEpsilon);
+            this.algorithm = payload.algorithm ?? this.algorithm;
+            this.replaySize = Number(payload.replaySize ?? this.replaySize);
+            this.trainingSteps = Number(payload.trainingSteps ?? this.trainingSteps);
+            this.trainingLoss = payload.trainingLoss ?? this.trainingLoss;
             this.dashboardController.update({
                 connected: Boolean(payload.connected),
                 mode: payload.mode ?? (this.trainingActive ? "Training" : "Manual"),
@@ -169,11 +191,13 @@ class BasicGame extends Phaser.Scene {
                 epsilon: this.latestEpsilon,
                 opponentEpsilon: this.latestOpponentEpsilon,
                 learningEnabled: Boolean(payload.learningEnabled),
+                algorithm: this.algorithm,
             });
             this.updateMetrics(payload.metrics);
         });
 
         this.socketManager.onStateError((payload) => {
+            this.awaitingAiMove = false;
             console.warn("Backend rejected state payload.", payload);
             this.dashboardController.update({ feedback: payload.message ?? "State rejected" });
         });
@@ -243,6 +267,9 @@ class BasicGame extends Phaser.Scene {
     }
 
     sendTrainingState() {
+        if (this.awaitingAiMove) {
+            return false;
+        }
         const currentAgentDistanceToBall = Math.abs(this.background.ball.image.y - this.actors.players[0].racket.y);
         const currentOpponentDistanceToBall = Math.abs(this.background.ball.image.y - this.actors.players[1].racket.y);
         const environmentState = buildQlearningState({
@@ -263,6 +290,7 @@ class BasicGame extends Phaser.Scene {
         });
 
         const stateWasSent = this.socketManager.sendStateUpdate(environmentState);
+        this.awaitingAiMove = stateWasSent;
         if (!stateWasSent) {
             this.dashboardController.update({
                 connected: false,
@@ -271,6 +299,7 @@ class BasicGame extends Phaser.Scene {
         }
         this.previousAgentDistanceToBall = currentAgentDistanceToBall;
         this.previousOpponentDistanceToBall = currentOpponentDistanceToBall;
+        return stateWasSent;
     }
 
     handleManualAgentControls() {
@@ -332,6 +361,7 @@ class BasicGame extends Phaser.Scene {
         this.previousOpponentDistanceToBall = null;
         this.pendingAgentAction = ACTIONS.STAY;
         this.pendingOpponentAction = ACTIONS.STAY;
+        this.awaitingAiMove = false;
         this.resetBall();
         this.socketManager.resetEpisode();
         this.dashboardController.update({
@@ -357,6 +387,10 @@ class BasicGame extends Phaser.Scene {
             agentOwner: ownership.agent,
             opponentOwner: ownership.opponent,
             learningEnabled: this.gameModeManager.isLearningEnabled() && this.trainingActive,
+            algorithm: this.algorithm,
+            replaySize: this.replaySize,
+            trainingSteps: this.trainingSteps,
+            trainingLoss: this.trainingLoss,
             feedback: this.lastHitBy ? `${this.lastHitBy} hit the ball` : this.agentMissedBall ? "Agent missed the ball" : "Playing",
         });
     }
@@ -411,20 +445,21 @@ class BasicGame extends Phaser.Scene {
     }
 
     handleGoal(body, up, down, left, right) {
-        if (!(left || right)) {
+        const pointWinner = pointWinnerForBoundary({ left, right });
+        if (!pointWinner) {
             return;
         }
 
         this.actors.point.sound.play();
         this.actors.scores.comboSmash = 0;
 
-        if (left) {
+        if (pointWinner === "agent") {
+            this.actors.players[0].score += 1;
+            this.lastScoredBy = "agent";
+        } else {
             this.actors.players[1].score += 1;
             this.lastScoredBy = "opponent";
             this.agentMissedBall = true;
-        } else if (right) {
-            this.actors.players[0].score += 1;
-            this.lastScoredBy = "agent";
         }
 
         this.resetBall(left);
