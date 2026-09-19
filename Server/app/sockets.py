@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 import time
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 from flask_socketio import emit
 
 from .ai.multi_agent_training_service import HUMAN_VS_AI, validate_multi_agent_state
+from .evolution.simulation import ARENA_IDS
 
 
 LOGGER = logging.getLogger(__name__)
@@ -70,7 +72,34 @@ def register_evolution_sockets(socketio, evolutionTrainingService) -> None:
     start/pause/resume/stop controls. Runs execute on a background thread and
     honor pause/stop at round boundaries.
     """
-    evolutionTrainingService.on_event = lambda event: socketio.emit("evolution_event", event)
+    snapshotBatch = []
+    snapshotQueue = queue.Queue(maxsize=2)
+
+    def publish_snapshots():
+        while True:
+            socketio.emit("evolution_event", snapshotQueue.get())
+
+    threading.Thread(target=publish_snapshots, daemon=True).start()
+
+    def enqueue_latest(payload):
+        try:
+            snapshotQueue.put_nowait(payload)
+        except queue.Full:
+            snapshotQueue.get_nowait()
+            snapshotQueue.put_nowait(payload)
+
+    def emit_evolution_event(event):
+        if event.get("type") != "match_snapshot":
+            socketio.emit("evolution_event", event)
+            return
+        snapshotBatch.append(event)
+        if len(snapshotBatch) == len(ARENA_IDS):
+            enqueue_latest(
+                {"type": "match_snapshot_batch", "snapshots": list(snapshotBatch)}
+            )
+            snapshotBatch.clear()
+
+    evolutionTrainingService.on_event = emit_evolution_event
 
     @socketio.on("evolution_start_run")
     def on_start_run(payload: dict[str, Any] | None = None):
@@ -81,6 +110,12 @@ def register_evolution_sockets(socketio, evolutionTrainingService) -> None:
         runUuid = payload.get("runUuid") or f"run-{int(time.time() * 1000)}"
         seed = int(payload.get("seed") or 0)
         fitnessFormula = payload.get("fitnessFormula") or ""
+        try:
+            evolutionTrainingService.controller.set_playback_speed(
+                int(payload.get("playbackSpeed") or 1)
+            )
+        except (TypeError, ValueError) as error:
+            return {"status": "error", "message": str(error)}
         thread = threading.Thread(
             target=_run_evolution_thread,
             args=(evolutionTrainingService, runUuid, seed, fitnessFormula),
@@ -89,6 +124,19 @@ def register_evolution_sockets(socketio, evolutionTrainingService) -> None:
         evolutionTrainingService.trainingThread = thread
         thread.start()
         return {"status": "started", "runUuid": runUuid}
+
+    @socketio.on("evolution_set_playback_speed")
+    def on_set_playback_speed(payload: dict[str, Any] | None = None):
+        try:
+            evolutionTrainingService.controller.set_playback_speed(
+                int((payload or {}).get("playbackSpeed"))
+            )
+        except (TypeError, ValueError) as error:
+            return {"status": "error", "message": str(error)}
+        return {
+            "status": "running",
+            "playbackSpeed": evolutionTrainingService.controller.playbackSpeed,
+        }
 
     @socketio.on("evolution_pause_run")
     def on_pause_run(payload=None):

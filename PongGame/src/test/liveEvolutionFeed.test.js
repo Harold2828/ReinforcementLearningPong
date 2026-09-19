@@ -8,6 +8,7 @@ function createSensor() {
     return {
         startEvolutionRun: vi.fn().mockResolvedValue({ status: "started" }),
         stopEvolutionRun: vi.fn().mockResolvedValue({ status: "stopping" }),
+        setEvolutionPlaybackSpeed: vi.fn().mockResolvedValue({ status: "running" }),
         onEvolutionEvent(callback) {
             handlers.live = callback;
         },
@@ -85,6 +86,27 @@ describe("LiveEvolutionFeed", () => {
         expect(events[0].source).toBe(SOURCE_LABEL.LIVE);
     });
 
+    it("validates and fans out a five-arena snapshot batch", () => {
+        const sensor = createSensor();
+        const feed = new LiveEvolutionFeed({ sensor });
+        const events = [];
+        feed.subscribe((event) => events.push(event));
+        feed.start();
+        sensor.handlers.connection(true);
+        const snapshots = Array.from({ length: 5 }, (_, index) => ({
+            ...validSnapshot(),
+            arenaId: `arena-${index}`,
+            matchId: `match-${index}`,
+        }));
+
+        sensor.handlers.live({ type: "match_snapshot_batch", snapshots });
+
+        expect(events).toHaveLength(5);
+        expect(events.map((event) => event.arenaId)).toEqual([
+            "arena-0", "arena-1", "arena-2", "arena-3", "arena-4",
+        ]);
+    });
+
     it("starts a requested run after connecting and stops it on demand", async () => {
         const sensor = createSensor();
         const feed = new LiveEvolutionFeed({ sensor });
@@ -94,10 +116,24 @@ describe("LiveEvolutionFeed", () => {
         expect(sensor.startEvolutionRun).not.toHaveBeenCalled();
 
         sensor.handlers.connection(true);
-        await vi.waitFor(() => expect(sensor.startEvolutionRun).toHaveBeenCalledWith({ runUuid: "ui-run" }));
+        await vi.waitFor(() => expect(sensor.startEvolutionRun).toHaveBeenCalledWith({
+            runUuid: "ui-run",
+            playbackSpeed: 1,
+        }));
 
         await feed.stopRun();
         expect(sensor.stopEvolutionRun).toHaveBeenCalledTimes(1);
+    });
+
+    it("changes the live playback speed without restarting training", async () => {
+        const sensor = createSensor();
+        const feed = new LiveEvolutionFeed({ sensor });
+
+        await feed.setPlaybackSpeed(4);
+
+        expect(feed.playbackSpeed).toBe(4);
+        expect(sensor.setEvolutionPlaybackSpeed).toHaveBeenCalledWith(4);
+        expect(() => feed.setPlaybackSpeed(3)).toThrow(/1, 2, or 4/);
     });
 
     it("drops an invalid match snapshot with a warning instead of rendering it", () => {

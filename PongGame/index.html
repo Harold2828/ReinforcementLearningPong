@@ -21,6 +21,14 @@
         <button type="button" data-action="switch-view" data-view="human-vs-champion">Human vs Champion</button>
         <button type="button" data-action="switch-view" data-view="evolution-dashboard">Evolution Dashboard</button>
       </nav>
+      <label class="playback-control" hidden>
+        Playback
+        <select data-action="playback-speed" aria-label="Evolution playback speed">
+          <option value="1">1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </label>
     </header>
     <main>
       <aside class="training-panel" aria-label="Training dashboard">

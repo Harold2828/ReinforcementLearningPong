@@ -40,6 +40,15 @@ def test_run_controller_resets_between_ui_runs():
     assert controller.wait_if_paused() is True
 
 
+def test_run_controller_accepts_only_supported_playback_speeds():
+    controller = RunController()
+    for speed in (1, 2, 4):
+        controller.set_playback_speed(speed)
+        assert controller.playbackSpeed == speed
+    with pytest.raises(ValueError):
+        controller.set_playback_speed(3)
+
+
 def tiny_dqn_configuration() -> DQNConfiguration:
     return DQNConfiguration(
         replayCapacity=512,
@@ -174,6 +183,7 @@ def test_run_generation_is_deterministic_across_stores(tmp_path):
         stepsPerAgentPerGeneration=40,
         roundTicks=20,
         metricsInterval=1,
+        optimizerInterval=32,
     )
     with open_store(tmp_path / "first") as firstStore, open_store(tmp_path / "second") as secondStore:
         first = make_service(firstStore, configuration=configuration, seed=11)
@@ -256,6 +266,25 @@ def test_identity_rewards_accumulate_per_agent_without_cross_contamination(store
         totalWins += agent.wins
         totalLosses += agent.losses
     assert totalWins == totalLosses
+
+
+def test_optimizer_interval_preserves_each_agent_replay_transitions(store):
+    configuration = EvolutionTrainingConfiguration(
+        stepsPerAgentPerGeneration=100_000,
+        roundTicks=80,
+        optimizerInterval=32,
+        winScore=40,
+    )
+    service = make_service(store, configuration=configuration, seed=13)
+
+    service.run_generation(runUuid="run-optimizer-interval", seed=13, maxRounds=1)
+
+    for agent in service.agents:
+        doneTransitions = sum(
+            1 for transition in agent.dqn.replay_buffer.memory if transition.done
+        )
+        assert len(agent.dqn.replay_buffer) == agent.dqn.total_steps - 1 - doneTransitions
+        assert 0 < agent.dqn.training_steps < len(agent.dqn.replay_buffer)
 
 
 def test_rejects_population_outside_spec_five_arenas(store):

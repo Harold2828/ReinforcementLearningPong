@@ -5,7 +5,7 @@ def participant(name, epsilon=0.0):
     return MatchParticipant(agentId=name, generation=3, epsilon=epsilon)
 
 
-def assignment(arena_id="arena-0", seed=11, reversed_sides=False):
+def assignment(arena_id="arena-0", seed=11, reversed_sides=False, match_key=""):
     return MatchAssignment(
         arenaId=arena_id,
         runId="run-1",
@@ -14,6 +14,7 @@ def assignment(arena_id="arena-0", seed=11, reversed_sides=False):
         agentB=participant(f"agent-b-{arena_id}"),
         reversedSides=reversed_sides,
         seed=seed,
+        matchKey=match_key,
     )
 
 
@@ -37,6 +38,13 @@ def signature(envelopes):
 
 def without_timestamp(envelope):
     return {key: value for key, value in envelope.items() if key != "stateTimestamp"}
+
+
+def test_match_key_makes_round_snapshot_ids_unique():
+    first = MatchSession(assignment(match_key="round-1"), MatchConfig()).snapshot()
+    second = MatchSession(assignment(match_key="round-2"), MatchConfig()).snapshot()
+
+    assert first["matchId"] != second["matchId"]
 
 
 def test_deterministic_trajectories_for_equal_seeds_and_actions():

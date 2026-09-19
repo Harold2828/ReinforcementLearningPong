@@ -61,6 +61,7 @@ class MatchAssignment:
     agentB: MatchParticipant
     reversedSides: bool = False
     seed: int = 0
+    matchKey: str = ""
 
 
 def _mirror_role(role: str | None) -> str | None:
@@ -241,7 +242,11 @@ class MatchSession:
             "type": "match_snapshot",
             "runId": self.assignment.runId,
             "generationId": self.assignment.generationId,
-            "matchId": f"match-{self.assignment.arenaId}-session-{self.sessionId}",
+            "matchId": "-".join(filter(None, (
+                f"match-{self.assignment.arenaId}",
+                self.assignment.matchKey,
+                f"session-{self.sessionId}",
+            ))),
             "arenaId": self.assignment.arenaId,
             "sequence": max(self.sequence, 1),
             "stateTimestamp": time.time() * 1000,

@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import random
 
+import torch
+
 from .dqn_agent import DQNAgent, DQNConfiguration
 from .multi_agent_training_service import MultiAgentTrainingService
 from .neural_training_service import NeuralTrainingService
@@ -65,6 +67,9 @@ def create_evolution_training_service(serverRoot: Path):
     <serverRoot>/data/evolution.db with checkpoints under <serverRoot>/data/checkpoints
     unless overridden.
     """
+    torch.set_num_threads(int(os.getenv("EVOLUTION_TORCH_THREADS", "1")))
+    torch.set_num_interop_threads(int(os.getenv("EVOLUTION_TORCH_INTEROP_THREADS", "1")))
+
     from ..evolution.genetic import GeneticConfiguration
     from ..evolution.evaluation import EvaluationConfiguration, FitnessConfiguration
     from ..evolution.training_orchestrator import (
@@ -81,6 +86,8 @@ def create_evolution_training_service(serverRoot: Path):
         stepsPerAgentPerGeneration=int(os.getenv("EVOLUTION_STEPS_PER_AGENT", "100000")),
         roundTicks=int(os.getenv("EVOLUTION_ROUND_TICKS", "1000")),
         maxGenerations=int(os.getenv("EVOLUTION_MAX_GENERATIONS", "1")),
+        snapshotInterval=int(os.getenv("EVOLUTION_SNAPSHOT_INTERVAL", "10")),
+        optimizerInterval=int(os.getenv("EVOLUTION_OPTIMIZER_INTERVAL", "1")),
         winScore=int(os.getenv("EVOLUTION_WIN_SCORE", "7")),
         device=os.getenv("EVOLUTION_DEVICE", "cpu").strip().lower(),
     )

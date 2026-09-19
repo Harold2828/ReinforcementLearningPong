@@ -17,6 +17,7 @@ export const AGENTS_PER_ARENA = 2;
 
 export const EVOLUTION_EVENT_TYPES = Object.freeze({
     MATCH_SNAPSHOT: "match_snapshot",
+    MATCH_SNAPSHOT_BATCH: "match_snapshot_batch",
     POPULATION: "population",
     EVALUATION: "evaluation",
     CHAMPION_PROMOTION: "champion_promotion",

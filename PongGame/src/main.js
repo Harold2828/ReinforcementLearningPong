@@ -61,6 +61,7 @@ function showView(view, modeSelect) {
     const trainingPanel = document.querySelector(".training-panel");
     const gameContainer = document.querySelector("#game-container");
     const dashboardSection = document.querySelector('[data-dash-role="dashboard"]');
+    const playbackControl = document.querySelector(".playback-control");
 
     if (trainingPanel) {
         trainingPanel.hidden = !isClassicLayout;
@@ -68,6 +69,9 @@ function showView(view, modeSelect) {
     gameContainer.hidden = view === EVOLUTION_VIEWS.EVOLUTION_DASHBOARD;
     if (dashboardSection) {
         dashboardSection.hidden = view !== EVOLUTION_VIEWS.EVOLUTION_DASHBOARD;
+    }
+    if (playbackControl) {
+        playbackControl.hidden = view !== EVOLUTION_VIEWS.EVOLUTION_TRAINING;
     }
 
     runScene(view === EVOLUTION_VIEWS.EVOLUTION_TRAINING ? "EvolutionTraining" : "BasicGame");
@@ -79,6 +83,9 @@ function showView(view, modeSelect) {
 }
 
 const modeSelect = document.querySelector('[data-action="select-game-mode"]');
+document.querySelector('[data-action="playback-speed"]')?.addEventListener("change", (event) => {
+    feed.setPlaybackSpeed(Number(event.target.value));
+});
 document.querySelectorAll('[data-action="switch-view"]').forEach((button) => {
     button.addEventListener("click", () => {
         const view = button.dataset.view;

@@ -27,6 +27,7 @@ class LiveEvolutionFeed {
         this.runRequested = false;
         this.runStarting = false;
         this.runPayload = {};
+        this.playbackSpeed = 1;
     }
 
     subscribe(listener) {
@@ -48,7 +49,13 @@ class LiveEvolutionFeed {
         if (this.sensor?.onEvolutionEvent) {
             this.sensor.onEvolutionEvent((payload) => {
                 if (this.connected) {
-                    this.publish(this.validate(payload));
+                    if (payload?.type === EVOLUTION_EVENT_TYPES.MATCH_SNAPSHOT_BATCH) {
+                        for (const snapshot of payload.snapshots ?? []) {
+                            this.publish(this.validate(snapshot));
+                        }
+                    } else {
+                        this.publish(this.validate(payload));
+                    }
                 }
             });
         }
@@ -62,8 +69,16 @@ class LiveEvolutionFeed {
 
     startRun(payload = {}) {
         this.runRequested = true;
-        this.runPayload = payload;
+        this.runPayload = { ...payload, playbackSpeed: this.playbackSpeed };
         return this.startRequestedRun();
+    }
+
+    setPlaybackSpeed(speed) {
+        if (![1, 2, 4].includes(speed)) {
+            throw new Error("playback speed must be 1, 2, or 4");
+        }
+        this.playbackSpeed = speed;
+        return this.sensor?.setEvolutionPlaybackSpeed?.(speed) ?? Promise.resolve(null);
     }
 
     async startRequestedRun() {

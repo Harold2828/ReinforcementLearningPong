@@ -44,6 +44,16 @@ class SocketManager {
         return this.socket.timeout(10_000).emitWithAck("evolution_stop_run");
     }
 
+    setEvolutionPlaybackSpeed(playbackSpeed) {
+        if (!this.socket?.connected) {
+            return Promise.resolve({ status: "disconnected" });
+        }
+        return this.socket.timeout(10_000).emitWithAck(
+            "evolution_set_playback_speed",
+            { playbackSpeed },
+        );
+    }
+
     sendStateUpdate(environmentState) {
         if (this.socket?.connected) {
             this.socket.emit("state_update", environmentState);

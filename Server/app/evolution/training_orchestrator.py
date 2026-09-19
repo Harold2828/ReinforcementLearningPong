@@ -154,6 +154,7 @@ class EvolutionTrainingConfiguration:
     maxGenerations: int = 1
     snapshotInterval: int = 10
     metricsInterval: int = 50
+    optimizerInterval: int = 1
     winScore: int = 7
     device: str = "cpu"
 
@@ -168,6 +169,8 @@ class EvolutionTrainingConfiguration:
             raise ValueError("snapshotInterval must be greater than zero")
         if self.metricsInterval <= 0:
             raise ValueError("metricsInterval must be greater than zero")
+        if self.optimizerInterval <= 0:
+            raise ValueError("optimizerInterval must be greater than zero")
         if self.winScore <= 0:
             raise ValueError("winScore must be greater than zero")
 
@@ -195,6 +198,7 @@ class RunController:
         self._stopRequested = False
         self._paused = threading.Event()
         self._resumed = threading.Event()
+        self._playbackSpeed = 1
 
     @property
     def stopRequested(self) -> bool:
@@ -208,6 +212,15 @@ class RunController:
         self._stopRequested = False
         self._paused.clear()
         self._resumed.clear()
+
+    @property
+    def playbackSpeed(self) -> int:
+        return self._playbackSpeed
+
+    def set_playback_speed(self, speed: int) -> None:
+        if speed not in (1, 2, 4):
+            raise ValueError("playback speed must be 1, 2, or 4")
+        self._playbackSpeed = speed
 
     def pause(self) -> None:
         self._paused.set()
@@ -625,6 +638,7 @@ class EvolutionTrainingService:
                     ),
                     reversedSides=reversedSides,
                     seed=matchSeed,
+                    matchKey=f"round-{roundIndex}",
                 )
             )
             matchSeeds.append(matchSeed)
@@ -636,6 +650,9 @@ class EvolutionTrainingService:
         pendingActions = {arenaId: ("STAY", "STAY") for arenaId in ARENA_IDS}
         lastEnvelopes: list[dict] | None = None
 
+        roundStarted = time.monotonic()
+        nextTickAt = roundStarted
+        emittedBatches = 0
         for tick in range(self.configuration.roundTicks):
             envelopes = engine.step(pendingActions)
             lastEnvelopes = envelopes
@@ -649,8 +666,33 @@ class EvolutionTrainingService:
                 if envelope["status"] != TERMINAL:
                     pendingActions[arenaId] = nextActions
             if (tick + 1) % self.configuration.snapshotInterval == 0:
+                emittedBatches += 1
+                elapsed = max(time.monotonic() - roundStarted, 1e-9)
+                replayTransitions = sum(len(agent.dqn.replay_buffer) for agent in self.agents)
+                optimizerUpdates = sum(agent.dqn.training_steps for agent in self.agents)
+                performance = {
+                    "physicsHz": round(1 / self.matchConfig.stepSeconds),
+                    "playbackSpeed": self.controller.playbackSpeed,
+                    "simulationStepsPerSecond": round((tick + 1) / elapsed, 2),
+                    "snapshotsPerSecond": round(emittedBatches / elapsed, 2),
+                    "optimizerUpdates": optimizerUpdates,
+                    "replayTransitions": replayTransitions,
+                    "updateToDataRatio": round(
+                        optimizerUpdates / max(replayTransitions, 1), 4
+                    ),
+                }
                 for envelope in envelopes:
-                    self._emit({**envelope, "source": EVENT_SOURCE_LIVE})
+                    self._emit({
+                        **envelope,
+                        "source": EVENT_SOURCE_LIVE,
+                        "performance": performance,
+                    })
+            nextTickAt += self.matchConfig.stepSeconds / self.controller.playbackSpeed
+            delay = nextTickAt - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            else:
+                nextTickAt = time.monotonic()
 
         self._record_matches(roundIndex, pairs, matchSeeds, lastEnvelopes or [])
         return lastEnvelopes
@@ -694,7 +736,8 @@ class EvolutionTrainingService:
         if agent.previousState is not None and agent.previousAction is not None:
             agent.dqn.remember(agent.previousState, agent.previousAction, reward, obs, done)
             agent.cumulativeReward += reward
-            agent.dqn.train_step()
+            if done or agent.dqn.total_steps % self.configuration.optimizerInterval == 0:
+                agent.dqn.train_step()
 
     def _next_action(self, agent: AgentRecord, obs: np.ndarray) -> int:
         actionIndex = agent.dqn.select_action(obs, explore=self._should_learn(agent))

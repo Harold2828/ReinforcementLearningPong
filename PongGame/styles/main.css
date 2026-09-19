@@ -165,6 +165,25 @@ footer {
     background: #2f80ed;
 }
 
+.playback-control {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+
+.playback-control[hidden] {
+    display: none;
+}
+
+.playback-control select {
+    background: #15171a;
+    border: 1px solid #5f6d7a;
+    border-radius: 6px;
+    color: #f4f7fb;
+    padding: 0.35rem 0.55rem;
+}
+
 .evolution-dashboard {
     grid-column: 2;
     background: #20262d;
