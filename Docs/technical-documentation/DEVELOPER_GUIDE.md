@@ -38,7 +38,7 @@ Docker Compose loads `.env.example` and overrides evolution settings in `docker-
 | `EVOLUTION_OPTIMIZER_INTERVAL` | 32 | Normal optimizer cadence; points also trigger an update attempt. |
 | `EVOLUTION_REPLAY_CAPACITY` | 2048 | Per-agent replay capacity in Docker. |
 | `EVOLUTION_REPLAY_WARMUP` / `BATCH_SIZE` | 16 / 16 | Minimum replay and minibatch size. |
-| `EVOLUTION_MAX_GENERATIONS` | default 1 | Maximum lifecycle iterations unless supplied externally. |
+| `EVOLUTION_MAX_GENERATIONS` | 3 | Configurable maximum lifecycle iterations. |
 | `EVOLUTION_EVALUATION_SEEDS` | 101,211,307 | Comparable evaluation seeds. |
 | `EVOLUTION_EVALUATION_MAX_STEPS` | 2000 | Evaluation match cap. |
 | `EVOLUTION_EVALUATION_WIN_SCORE` | 7 | Evaluation-only score termination. |

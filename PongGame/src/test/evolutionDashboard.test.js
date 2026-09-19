@@ -94,4 +94,23 @@ describe("EvolutionDashboard", () => {
         const firstRowCells = [...document.querySelectorAll('[data-dash-role="population"] tr')][0].children;
         expect(firstRowCells[4].textContent).toContain("winRate: 0.99");
     });
+
+    it("binds LIVE numeric agent ids and renders lineage", () => {
+        const dashboard = renderDashboard();
+        const event = populationEvent();
+        event.agents = event.agents.map((agent, index) => ({
+            ...agent,
+            agentId: index,
+            lineage: index === 0 ? [5] : agent.lineage,
+        }));
+        dashboard.handleEvent(event);
+        dashboard.handleEvent({
+            type: EVOLUTION_EVENT_TYPES.EVALUATION,
+            results: [{ agentId: 0, fitness: { fitness: 0.75 } }],
+        });
+
+        const cells = document.querySelector('[data-dash-role="population"] tr').children;
+        expect(cells[4].textContent).toContain("fitness: 0.75");
+        expect(cells[5].textContent).toBe("5");
+    });
 });

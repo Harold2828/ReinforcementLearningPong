@@ -107,6 +107,7 @@ def test_elite_and_offspring_weight_inheritance_is_safe():
         eliteChild, 0, elitePlan, [parentRecord]
     )
     assert eliteAudit["policy"] == "elite_exact_copy"
+    assert eliteAudit["parentIndices"] == [0]
     for key, tensor in parent.policy_net.state_dict().items():
         assert torch.equal(tensor, eliteChild.policy_net.state_dict()[key])
     for key, tensor in parent.target_net.state_dict().items():
@@ -127,6 +128,7 @@ def test_elite_and_offspring_weight_inheritance_is_safe():
         offspringChild, 0, offspringPlan, [parentRecord]
     )
     assert offspringAudit["policy"] == "compatible_tensors_only"
+    assert offspringAudit["parentIndices"] == [0, 0]
     assert offspringAudit["skippedKeys"]
     for key in offspringAudit["copiedKeys"]:
         assert torch.equal(
@@ -272,6 +274,12 @@ def test_complete_three_generation_run(tmp_path):
                 (event["agentA"]["id"], event["agentB"]["id"])
             )
         assert len(firstSnapshots) == 18
+        populationEvents = [event for event in events if event.get("type") == "population"]
+        assert [event["generationId"] for event in populationEvents] == [
+            "generation-0", "generation-1", "generation-2"
+        ]
+        assert all(agent["lineage"] == [] for agent in populationEvents[0]["agents"])
+        assert all(agent["lineage"] for event in populationEvents[1:] for agent in event["agents"])
         assert all(
             snapshot["agentA"]["score"] == snapshot["agentB"]["score"] == 0
             for snapshot in firstSnapshots.values()

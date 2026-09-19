@@ -512,8 +512,9 @@ class EvolutionTrainingService:
                     {
                         "type": "evaluation",
                         "source": EVENT_SOURCE_LIVE,
-                        "runId": self.runId,
-                        "generationId": self.generationId,
+                        "runId": f"run-{self.runId}",
+                        "generationId": f"generation-{self.generationIndex}",
+                        "generationStoreId": self.generationId,
                         "benchmark": evaluationConfiguration.benchmarkVersion,
                         "results": [
                             {"agentId": agent.index, "fitness": result}
@@ -619,6 +620,7 @@ class EvolutionTrainingService:
             return {
                 "policy": "elite_exact_copy",
                 "parentIndex": parentIndex,
+                "parentIndices": [parentIndex],
                 "copiedKeys": sorted(parent.policy_net.state_dict()),
                 "skippedKeys": [],
                 "targetSynchronized": False,
@@ -643,6 +645,7 @@ class EvolutionTrainingService:
         return {
             "policy": "compatible_tensors_only",
             "parentIndex": offspring.parentAIndex,
+            "parentIndices": [offspring.parentAIndex, offspring.parentBIndex],
             "copiedKeys": sorted(compatible),
             "skippedKeys": skipped,
             "targetSynchronized": True,
@@ -654,7 +657,8 @@ class EvolutionTrainingService:
                 "type": "population",
                 "source": EVENT_SOURCE_LIVE,
                 "runId": f"run-{self.runId}",
-                "generationId": f"generation-{self.generationId}",
+                "generationId": f"generation-{self.generationIndex}",
+                "generationStoreId": self.generationId,
                 "agents": self._agent_summaries(),
             }
         )
@@ -731,7 +735,7 @@ class EvolutionTrainingService:
                 MatchAssignment(
                     arenaId=self.arenaIds[arenaIndex],
                     runId=f"run-{self.runId}",
-                    generationId=f"generation-{self.generationId}",
+                    generationId=f"generation-{self.generationIndex}",
                     agentA=MatchParticipant(
                         agentId=f"agent-{aIndex}",
                         generation=self.generationIndex,
@@ -910,6 +914,11 @@ class EvolutionTrainingService:
                 "fitness": None,
                 "role": agent.role,
                 "weightInheritance": agent.inheritance,
+                "lineage": (
+                    list(agent.inheritance.get("parentIndices", ()))
+                    if agent.inheritance is not None
+                    else []
+                ),
                 "status": "available",
                 "games": agent.wins + agent.losses,
                 "wins": agent.wins,
@@ -929,8 +938,9 @@ class EvolutionTrainingService:
             {
                 "type": "training_metrics",
                 "source": EVENT_SOURCE_LIVE,
-                "runId": self.runId,
-                "generationId": self.generationId,
+                "runId": f"run-{self.runId}",
+                "generationId": f"generation-{self.generationIndex}",
+                "generationStoreId": self.generationId,
                 "round": self._roundIndex,
                 "agents": self._agent_summaries(),
             }

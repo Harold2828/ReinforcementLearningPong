@@ -83,7 +83,7 @@ class EvolutionDashboard {
         this.setStatus("Evaluation results received");
         for (const result of event.results ?? []) {
             const row = [...this.populationBody.querySelectorAll("tr")].find((entry) =>
-                entry.firstElementChild?.textContent === result.agentId,
+                entry.firstElementChild?.textContent === String(result.agentId),
             );
             if (row?.children[4]) {
                 row.children[4].textContent = formatFitness(result.fitness);

@@ -196,7 +196,8 @@ def test_run_generation_persists_agents_matches_and_v3_checkpoints(store, tmp_pa
     assert all(event.get("source") == "LIVE" for event in events)
     population = next(event for event in events if event["type"] == "population")
     assert population["runId"] == f"run-{summary['runId']}"
-    assert population["generationId"] == f"generation-{summary['generationId']}"
+    assert population["generationId"] == "generation-0"
+    assert population["generationStoreId"] == summary["generationId"]
 
 
 def test_run_generation_is_deterministic_across_stores(tmp_path):

@@ -87,7 +87,7 @@ def create_evolution_training_service(serverRoot: Path):
         courtCount=courtCount,
         stepsPerAgentPerGeneration=int(os.getenv("EVOLUTION_STEPS_PER_AGENT", "100000")),
         roundTicks=int(os.getenv("EVOLUTION_ROUND_TICKS", "1000")),
-        maxGenerations=int(os.getenv("EVOLUTION_MAX_GENERATIONS", "1")),
+        maxGenerations=int(os.getenv("EVOLUTION_MAX_GENERATIONS", "3")),
         snapshotInterval=int(os.getenv("EVOLUTION_SNAPSHOT_INTERVAL", "10")),
         optimizerInterval=int(os.getenv("EVOLUTION_OPTIMIZER_INTERVAL", "1")),
         winScore=int(os.getenv("EVOLUTION_WIN_SCORE", "7")),
