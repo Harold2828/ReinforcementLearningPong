@@ -9,7 +9,7 @@ from .checkpoints import CheckpointManager
 from .db import connect, migrate, utc_now
 from .errors import ControlledRecoveryError, ProvenanceViolationError
 
-SUPPORTED_MODEL_SPEC_VERSIONS: frozenset[int] = frozenset({2})
+SUPPORTED_MODEL_SPEC_VERSIONS: frozenset[int] = frozenset({2, 3})
 LOADABLE_CHECKPOINT_TYPES: frozenset[str] = frozenset({"weights", "full"})
 
 

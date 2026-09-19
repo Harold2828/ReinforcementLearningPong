@@ -145,6 +145,18 @@ def test_champion_candidates_exclude_unsupported_model_versions(tmp_path):
         assert store.available_champion_candidates(run_id) == []
 
 
+def test_champion_candidates_accept_spec2_legacy_and_spec3_checkpoints(tmp_path):
+    with EvolutionStore(db_path=tmp_path / "db.sqlite3", checkpoint_root=tmp_path / "checkpoints") as store:
+        run_id, generation_id, agent_id = make_run_generation_and_agent(store)
+        linked_checkpoint(store, agent_id, relative_name="agents/v2.pt", model_spec_version=2)
+
+        v3_agent = store.register_agent("agent-v3", generation_id, "initial", "{}")
+        linked_checkpoint(store, v3_agent, relative_name="agents/v3.pt", model_spec_version=3)
+
+        candidates = store.available_champion_candidates(run_id)
+        assert sorted(candidate["agent_id"] for candidate in candidates) == [agent_id, v3_agent]
+
+
 def test_champion_candidates_exclude_missing_and_corrupt_files(tmp_path):
     with EvolutionStore(db_path=tmp_path / "db.sqlite3", checkpoint_root=tmp_path / "checkpoints") as store:
         run_id, generation_id, agent_id = make_run_generation_and_agent(store)

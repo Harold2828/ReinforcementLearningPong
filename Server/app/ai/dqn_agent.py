@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 import random
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -14,6 +14,33 @@ from .q_learning_agent import ALLOWED_ACTIONS, PongState
 
 
 STATE_DIMENSION = 12
+
+MIN_HIDDEN_LAYERS = 1
+MAX_HIDDEN_LAYERS = 4
+ALLOWED_HIDDEN_WIDTHS = (32, 64, 128, 256)
+DEFAULT_HIDDEN_WIDTHS = (128, 128)
+CHECKPOINT_SCHEMA_VERSION = 3
+ARCHITECTURE_SCHEMA_VERSION = "genome-v1"
+
+
+class ArchitectureMismatchError(ValueError):
+    """Raised when a checkpoint cannot be loaded safely into the agent."""
+
+
+def _normalize_hidden_widths(hiddenWidths) -> tuple[int, ...]:
+    widths = getattr(hiddenWidths, "hiddenWidths", hiddenWidths)
+    if not isinstance(widths, (list, tuple)):
+        raise ValueError("hiddenWidths must be a sequence of integers")
+    if not (MIN_HIDDEN_LAYERS <= len(widths) <= MAX_HIDDEN_LAYERS):
+        raise ValueError(
+            f"hidden layer count {len(widths)} must be in [{MIN_HIDDEN_LAYERS}, {MAX_HIDDEN_LAYERS}]"
+        )
+    result = []
+    for width in widths:
+        if isinstance(width, bool) or not isinstance(width, int) or width not in ALLOWED_HIDDEN_WIDTHS:
+            raise ValueError(f"unsupported hidden width {width!r}; allowed: {ALLOWED_HIDDEN_WIDTHS}")
+        result.append(width)
+    return tuple(result)
 
 
 @dataclass(frozen=True)
@@ -49,18 +76,23 @@ class DQNConfiguration:
 
 
 class DuelingDQN(nn.Module):
-    """Small dueling network for the structured Pong state."""
+    """Dueling network with a configurable 1-4 hidden layer architecture."""
 
-    def __init__(self, stateDimension: int = STATE_DIMENSION, numberOfActions: int = len(ALLOWED_ACTIONS)):
+    def __init__(
+        self,
+        stateDimension: int = STATE_DIMENSION,
+        numberOfActions: int = len(ALLOWED_ACTIONS),
+        hiddenWidths: Sequence[int] | object = DEFAULT_HIDDEN_WIDTHS,
+    ):
         super().__init__()
-        self.features = nn.Sequential(
-            nn.Linear(stateDimension, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-        )
-        self.valueHead = nn.Linear(128, 1)
-        self.advantageHead = nn.Linear(128, numberOfActions)
+        hiddenWidths = _normalize_hidden_widths(hiddenWidths)
+        self.hiddenWidths = hiddenWidths
+        layers: list[nn.Module] = [nn.Linear(stateDimension, hiddenWidths[0]), nn.ReLU()]
+        for previousWidth, nextWidth in zip(hiddenWidths, hiddenWidths[1:]):
+            layers += [nn.Linear(previousWidth, nextWidth), nn.ReLU()]
+        self.features = nn.Sequential(*layers)
+        self.valueHead = nn.Linear(hiddenWidths[-1], 1)
+        self.advantageHead = nn.Linear(hiddenWidths[-1], numberOfActions)
 
     def forward(self, state: torch.Tensor) -> torch.Tensor:
         features = self.features(state)
@@ -145,6 +177,7 @@ class DQNAgent:
         target_update_interval: int | None = None,
         device: str | None = None,
         configuration: DQNConfiguration | None = None,
+        hiddenWidths: Sequence[int] | object = DEFAULT_HIDDEN_WIDTHS,
         randomGenerator: random.Random | None = None,
     ):
         base = configuration or DQNConfiguration()
@@ -163,10 +196,11 @@ class DQNAgent:
         self.configuration.validate()
         self.state_dim = state_dim
         self.num_actions = num_actions
+        self.hiddenWidths = _normalize_hidden_widths(hiddenWidths)
         self.randomGenerator = randomGenerator or random.Random()
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-        self.policy_net = DuelingDQN(state_dim, num_actions).to(self.device)
-        self.target_net = DuelingDQN(state_dim, num_actions).to(self.device)
+        self.policy_net = DuelingDQN(state_dim, num_actions, self.hiddenWidths).to(self.device)
+        self.target_net = DuelingDQN(state_dim, num_actions, self.hiddenWidths).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.configuration.learningRate)
@@ -246,16 +280,25 @@ class DQNAgent:
     def diagnostics(self) -> dict[str, float | int | None]:
         return {"trainingLoss": self.latest_loss, "replaySize": len(self.replay_buffer), "trainingSteps": self.training_steps}
 
+    def checkpoint_metadata(self) -> dict:
+        """Self-describing architecture metadata coordinated with the SPEC-01 store."""
+        return {
+            "schemaVersion": ARCHITECTURE_SCHEMA_VERSION,
+            "modelSpecVersion": CHECKPOINT_SCHEMA_VERSION,
+            "stateDimension": self.state_dim,
+            "numberOfActions": self.num_actions,
+            "hiddenWidths": list(self.hiddenWidths),
+        }
+
     def save(self, path: str | Path) -> None:
         checkpointPath = Path(path).expanduser().resolve()
         checkpointPath.parent.mkdir(parents=True, exist_ok=True)
         temporaryPath = checkpointPath.with_suffix(checkpointPath.suffix + ".tmp")
         torch.save(
             {
-                "version": 2,
+                "version": CHECKPOINT_SCHEMA_VERSION,
                 "configuration": asdict(self.configuration),
-                "stateDimension": self.state_dim,
-                "numberOfActions": self.num_actions,
+                "architecture": self.checkpoint_metadata(),
                 "policyState": self.policy_net.state_dict(),
                 "targetState": self.target_net.state_dict(),
                 "optimizerState": self.optimizer.state_dict(),
@@ -272,16 +315,55 @@ class DQNAgent:
             return False
         checkpoint: Any = torch.load(checkpointPath, map_location=self.device, weights_only=False)
         if isinstance(checkpoint, dict) and "policyState" in checkpoint:
-            self.policy_net.load_state_dict(checkpoint["policyState"])
-            self.target_net.load_state_dict(checkpoint.get("targetState", checkpoint["policyState"]))
+            candidate_hidden, candidate_state_dim, candidate_actions = self._candidate_architecture(checkpoint)
+            self._assert_compatible_architecture(candidate_hidden, candidate_state_dim, candidate_actions)
+            policy_state = checkpoint["policyState"]
+            target_state = checkpoint.get("targetState", policy_state)
+            self._assert_state_compatible(self.policy_net, policy_state)
+            self._assert_state_compatible(self.target_net, target_state)
+            self.policy_net.load_state_dict(policy_state)
+            self.target_net.load_state_dict(target_state)
             if "optimizerState" in checkpoint:
                 self.optimizer.load_state_dict(checkpoint["optimizerState"])
             self.total_steps = int(checkpoint.get("totalSteps", 0))
             self.training_steps = int(checkpoint.get("trainingSteps", 0))
         else:
+            if self.hiddenWidths != DEFAULT_HIDDEN_WIDTHS:
+                raise ArchitectureMismatchError(
+                    f"legacy checkpoint lacks architecture metadata; it requires hiddenWidths "
+                    f"{list(DEFAULT_HIDDEN_WIDTHS)}, agent has {list(self.hiddenWidths)}"
+                )
+            self._assert_state_compatible(self.policy_net, checkpoint)
             self.policy_net.load_state_dict(checkpoint)
             self.target_net.load_state_dict(checkpoint)
         return True
+
+    @staticmethod
+    def _candidate_architecture(checkpoint: dict) -> tuple[tuple[int, ...], int, int]:
+        architecture = checkpoint.get("architecture")
+        if architecture is None:
+            hidden = DEFAULT_HIDDEN_WIDTHS
+            state_dim = int(checkpoint.get("stateDimension", STATE_DIMENSION))
+            actions = int(checkpoint.get("numberOfActions", len(ALLOWED_ACTIONS)))
+        else:
+            hidden = _normalize_hidden_widths(architecture.get("hiddenWidths"))
+            state_dim = int(architecture.get("stateDimension", STATE_DIMENSION))
+            actions = int(architecture.get("numberOfActions", len(ALLOWED_ACTIONS)))
+        return hidden, state_dim, actions
+
+    def _assert_compatible_architecture(self, hidden: tuple[int, ...], state_dim: int, actions: int) -> None:
+        if hidden != self.hiddenWidths or state_dim != self.state_dim or actions != self.num_actions:
+            raise ArchitectureMismatchError(
+                f"checkpoint architecture hiddenWidths={list(hidden)} dims=({state_dim}, {actions}) "
+                f"does not match agent hiddenWidths={list(self.hiddenWidths)} dims=({self.state_dim}, {self.num_actions})"
+            )
+
+    @staticmethod
+    def _assert_state_compatible(module: nn.Module, state_dict: dict) -> None:
+        expected = {key: tuple(parameter.shape) for key, parameter in module.named_parameters()}
+        provided = {key: tuple(tensor.shape) for key, tensor in state_dict.items() if key in expected}
+        if set(expected) != set(provided) or any(provided[key] != shape for key, shape in expected.items()):
+            raise ArchitectureMismatchError("checkpoint weights do not match the network architecture")
 
     @staticmethod
     def action_name(actionIndex: int) -> str:
