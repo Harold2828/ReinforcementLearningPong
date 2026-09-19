@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { EVOLUTION_EVENT_TYPES, SOURCE_LABEL, layoutArenas } from "../evolution/evolutionContract";
+import { applySnapshot, createArenaBoard, snapshotFor } from "../evolution/arenaState";
 
 /**
  * EVOLUTION_TRAINING view: renders five Pong arenas from snapshot envelopes.
@@ -10,7 +11,7 @@ import { EVOLUTION_EVENT_TYPES, SOURCE_LABEL, layoutArenas } from "../evolution/
 class EvolutionTrainingScene extends Phaser.Scene {
     constructor() {
         super({ key: "EvolutionTraining" });
-        this.latest = {};
+        this.board = createArenaBoard();
         this.feed = null;
         this.unsubscribe = null;
     }
@@ -23,7 +24,7 @@ class EvolutionTrainingScene extends Phaser.Scene {
         const { width, height } = this.sys.game.canvas;
         this.layout = layoutArenas(width, height);
 
-        this.add.text(10, 10, `${SOURCE_LABEL.MOCK} DATA — authoritative backend snapshots pending (SPEC-05/06)`, {
+        this.add.text(10, 10, "EVOLUTION TRAINING — LIVE Socket.IO stream (SPEC-06)", {
             fontSize: "12px",
             fontFamily: "'Press Start 2P', 'Courier New', monospace",
             fill: "#f4d03f",
@@ -63,13 +64,13 @@ class EvolutionTrainingScene extends Phaser.Scene {
 
     handleEvent(event) {
         if (event?.type === EVOLUTION_EVENT_TYPES.MATCH_SNAPSHOT) {
-            this.latest[event.arenaId] = event;
+            applySnapshot(this.board, event);
         }
     }
 
     update() {
         this.arenas.forEach((arena) => {
-            const snapshot = this.latest[arena.rect.arenaId];
+            const snapshot = snapshotFor(this.board, arena.rect.arenaId);
             if (snapshot) {
                 this.redrawArena(arena, snapshot);
             }
@@ -110,6 +111,7 @@ class EvolutionTrainingScene extends Phaser.Scene {
                 `A ${snapshot.agentA.id} g${snapshot.agentA.generation} S:${snapshot.agentA.score} \u03b5${snapshot.agentA.epsilon.toFixed(2)}`,
                 `B ${snapshot.agentB.id} g${snapshot.agentB.generation} S:${snapshot.agentB.score} \u03b5${snapshot.agentB.epsilon.toFixed(2)}`,
                 `steps ${snapshot.step} elapsed ${snapshot.elapsedSteps} | ${snapshot.status}`,
+                `source ${snapshot.source === SOURCE_LABEL.MOCK ? SOURCE_LABEL.MOCK : SOURCE_LABEL.LIVE}`,
             ].join("\n"),
         );
     }

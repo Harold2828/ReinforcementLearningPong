@@ -6,10 +6,19 @@ services:
       - .env.example
     environment:
       FLASK_DEBUG: "false"
+      EVOLUTION_TRAINING_ENABLED: "1"
+      EVOLUTION_DATA_PATH: /app/evolution_data
+      EVOLUTION_ROUND_TICKS: "150"
+      EVOLUTION_STEPS_PER_AGENT: "100000"
+      EVOLUTION_REPLAY_WARMUP: "16"
+      EVOLUTION_REPLAY_CAPACITY: "2048"
+      EVOLUTION_BATCH_SIZE: "16"
+      EVOLUTION_DEVICE: cpu
     ports:
       - "5001:5001"
     volumes:
       - q_learning_models:/app/models
+      - evolution_data:/app/evolution_data
 
   frontend:
     build:
@@ -23,3 +32,4 @@ services:
 
 volumes:
   q_learning_models:
+  evolution_data:

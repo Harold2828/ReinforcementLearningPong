@@ -3,7 +3,9 @@ import BasicGame from "./scenes/BasicGame";
 import EvolutionTrainingScene from "./scenes/EvolutionTrainingScene";
 import { EVOLUTION_VIEWS } from "./evolution/evolutionContract";
 import { MockEvolutionFeed } from "./evolution/mockEvolutionFeed";
+import { LiveEvolutionFeed } from "./evolution/liveEvolutionFeed";
 import { EvolutionDashboard } from "./evolution/dashboard";
+import SocketManager from "./utils/socketManager";
 import { GAME_MODES } from "./utils/gameModeManager";
 
 const config = {
@@ -27,7 +29,12 @@ const config = {
 };
 const game = new Phaser.Game(config);
 
-const feed = new MockEvolutionFeed();
+const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:5001";
+const companionSocket = new SocketManager(backendUrl);
+const feed = new LiveEvolutionFeed({
+    sensor: companionSocket,
+    fallback: new MockEvolutionFeed(),
+});
 feed.start();
 
 const dashboard = new EvolutionDashboard(document.querySelector('[data-dash-role="dashboard"]'));

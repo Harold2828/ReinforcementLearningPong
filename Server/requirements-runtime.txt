@@ -1,5 +1,6 @@
 Flask
 Flask-SocketIO
 eventlet
+gunicorn
 numpy
 torch

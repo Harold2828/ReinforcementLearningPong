@@ -15,7 +15,10 @@ def utc_now() -> str:
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(str(db_path))
+    # check_same_thread=False: the SPEC-06 evolution store is opened on the
+    # Socket.IO main thread but written by the dedicated run_generation daemon
+    # thread; sqlite3 serializes access and WAL + busy_timeout guard concurrency.
+    connection = sqlite3.connect(str(db_path), check_same_thread=False)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA busy_timeout = 5000")

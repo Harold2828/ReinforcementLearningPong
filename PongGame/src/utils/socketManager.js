@@ -26,6 +26,10 @@ class SocketManager {
         this.socket.on("state_error", callback);
     }
 
+    onEvolutionEvent(callback) {
+        this.socket.on("evolution_event", callback);
+    }
+
     sendStateUpdate(environmentState) {
         if (this.socket?.connected) {
             this.socket.emit("state_update", environmentState);

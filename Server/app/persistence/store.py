@@ -135,6 +135,15 @@ class EvolutionStore:
             )
         return cursor.rowcount == 1
 
+    def abort_generation(self, generation_id: int) -> bool:
+        """Marks a never-completed generation as aborted (e.g. stopped run)."""
+        with self.transaction():
+            cursor = self._connection.execute(
+                "UPDATE generations SET status = 'aborted', completed_at = ? WHERE id = ? AND status <> 'completed'",
+                (utc_now(), generation_id),
+            )
+        return cursor.rowcount == 1
+
     def register_agent(
         self,
         agent_uuid: str,

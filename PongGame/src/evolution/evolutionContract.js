@@ -32,7 +32,8 @@ export const MATCH_STATUS = Object.freeze({
 
 export const SOURCE_LABEL = Object.freeze({
     MOCK: "MOCK",
-    note: "Authoritative backend snapshots (SPEC-05/06) are not wired yet; visualizations run on clearly labeled mock data.",
+    LIVE: "LIVE",
+    note: "MOCK events are locally generated placeholders; LIVE events arrive over Socket.IO from the SPEC-06 orchestrator.",
 });
 
 function presentObjectFields(value) {

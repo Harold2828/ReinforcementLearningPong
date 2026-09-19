@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from typing import Any
 
 from flask_socketio import emit
@@ -59,6 +61,62 @@ def register_sockets(socketio, trainingService) -> None:
     def on_legacy_player_action(payload: dict[str, Any]):
         LOGGER.warning("Received legacy player_action payload. Use state_update for multi-agent Q-learning.")
         return on_state_update(_legacy_payload_to_multi_agent_state(payload))
+
+
+def register_evolution_sockets(socketio, evolutionTrainingService) -> None:
+    """SPEC-06 evolution training streaming over Socket.IO.
+
+    Streams LIVE snapshots/metrics as ``evolution_event`` payloads and exposes
+    start/pause/resume/stop controls. Runs execute on a background thread and
+    honor pause/stop at round boundaries.
+    """
+    evolutionTrainingService.on_event = lambda event: socketio.emit("evolution_event", event)
+
+    @socketio.on("evolution_start_run")
+    def on_start_run(payload: dict[str, Any] | None = None):
+        payload = payload or {}
+        runningThread = getattr(evolutionTrainingService, "trainingThread", None)
+        if runningThread is not None and runningThread.is_alive():
+            return {"status": "busy", "message": "an evolution run is already in progress"}
+        runUuid = payload.get("runUuid") or f"run-{int(time.time() * 1000)}"
+        seed = int(payload.get("seed") or 0)
+        fitnessFormula = payload.get("fitnessFormula") or ""
+        thread = threading.Thread(
+            target=_run_evolution_thread,
+            args=(evolutionTrainingService, runUuid, seed, fitnessFormula),
+            daemon=True,
+        )
+        evolutionTrainingService.trainingThread = thread
+        thread.start()
+        return {"status": "started", "runUuid": runUuid}
+
+    @socketio.on("evolution_pause_run")
+    def on_pause_run(payload=None):
+        evolutionTrainingService.controller.pause()
+        status = "paused" if evolutionTrainingService.runId is not None else "idle"
+        return {"status": status}
+
+    @socketio.on("evolution_resume_run")
+    def on_resume_run(payload=None):
+        evolutionTrainingService.controller.resume()
+        status = "running" if evolutionTrainingService.runId is not None else "idle"
+        return {"status": status}
+
+    @socketio.on("evolution_stop_run")
+    def on_stop_run(payload=None):
+        evolutionTrainingService.controller.request_stop()
+        return {"status": "stopping"}
+
+
+def _run_evolution_thread(service, runUuid: str, seed: int, fitnessFormula: str) -> None:
+    try:
+        summary = service.run_generation(runUuid=runUuid, seed=seed, fitnessFormula=fitnessFormula)
+        if service.on_event is not None:
+            service.on_event({**summary, "type": "run_finished", "source": "LIVE"})
+    except BaseException as error:
+        LOGGER.exception("Evolution run failed for %s", runUuid)
+        if service.on_event is not None:
+            service.on_event({"type": "run_error", "source": "LIVE", "message": str(error)})
 
 
 def _legacy_payload_to_multi_agent_state(payload: dict[str, Any]) -> dict[str, Any]:

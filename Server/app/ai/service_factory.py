@@ -58,6 +58,47 @@ def create_training_service(serverRoot: Path, randomSeed: int | None = None):
     return service
 
 
+def create_evolution_training_service(serverRoot: Path):
+    """SPEC-06 evolutionary training service read from the environment.
+
+    Enabled via EVOLUTION_TRAINING_ENABLED=1. Persists to
+    <serverRoot>/data/evolution.db with checkpoints under <serverRoot>/data/checkpoints
+    unless overridden.
+    """
+    from ..evolution.genetic import GeneticConfiguration
+    from ..evolution.training_orchestrator import (
+        EvolutionTrainingConfiguration,
+        EvolutionTrainingService,
+    )
+    from ..persistence.store import EvolutionStore
+
+    dataDir = _resolve_path(serverRoot, os.getenv("EVOLUTION_DATA_PATH", "data"))
+    dbPath = Path(os.getenv("EVOLUTION_DB_PATH", str(dataDir / "evolution.db")))
+    checkpointRoot = Path(os.getenv("EVOLUTION_CHECKPOINT_ROOT", str(dataDir / "checkpoints")))
+    store = EvolutionStore(dbPath, checkpointRoot)
+    configuration = EvolutionTrainingConfiguration(
+        stepsPerAgentPerGeneration=int(os.getenv("EVOLUTION_STEPS_PER_AGENT", "100000")),
+        roundTicks=int(os.getenv("EVOLUTION_ROUND_TICKS", "1000")),
+        winScore=int(os.getenv("EVOLUTION_WIN_SCORE", "7")),
+        device=os.getenv("EVOLUTION_DEVICE", "cpu").strip().lower(),
+    )
+    geneticConfiguration = GeneticConfiguration(seed=int(os.getenv("EVOLUTION_SEED", "42")))
+    dqnConfiguration = DQNConfiguration(
+        replayCapacity=int(os.getenv("EVOLUTION_REPLAY_CAPACITY", "100000")),
+        replayWarmup=int(os.getenv("EVOLUTION_REPLAY_WARMUP", "5000")),
+        batchSize=int(os.getenv("EVOLUTION_BATCH_SIZE", "64")),
+        epsilonDecaySteps=int(os.getenv("EVOLUTION_EPSILON_DECAY_STEPS", "100000")),
+    )
+    return EvolutionTrainingService(
+        store,
+        configuration=configuration,
+        geneticConfiguration=geneticConfiguration,
+        dqnConfiguration=dqnConfiguration,
+        codeRevision=os.getenv("EVOLUTION_CODE_REVISION", ""),
+        benchmarkDefinition=os.getenv("EVOLUTION_BENCHMARK", "spec-06-isolated-round-robin"),
+    )
+
+
 def _resolve_path(serverRoot: Path, configuredPath: str) -> Path:
     path = Path(configuredPath)
     return path if path.is_absolute() else serverRoot / path
