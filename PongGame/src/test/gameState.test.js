@@ -60,7 +60,7 @@ describe("gameState helpers", () => {
         });
     });
 
-    it("centralizes human and ai ownership by game mode", () => {
+it("centralizes human and ai ownership by game mode", () => {
         const manager = new GameModeManager(GAME_MODES.AI_VS_AI);
 
         expect(manager.isAgentAiControlled()).toBe(true);
@@ -78,6 +78,21 @@ describe("gameState helpers", () => {
         expect(manager.isOpponentHumanControlled()).toBe(true);
         expect(manager.isAgentAiControlled()).toBe(true);
         expect(manager.isLearningEnabled()).toBe(true);
+    });
+
+    it("models HUMAN_VS_CHAMPION as frozen champion against a human", () => {
+        const manager = new GameModeManager(GAME_MODES.HUMAN_VS_CHAMPION);
+
+        expect(manager.getModeLabel()).toBe("Human vs Champion");
+        expect(manager.isChampionMode()).toBe(true);
+        expect(manager.isAgentAiControlled()).toBe(true);
+        expect(manager.isOpponentHumanControlled()).toBe(true);
+        expect(manager.isLearningEnabled()).toBe(false);
+        expect(manager.getOwnership()).toEqual({
+            opponent: "Human",
+            agent: "Frozen Champion",
+            learningEnabled: false,
+        });
     });
 
     it("awards a point to the paddle opposite the crossed boundary", () => {

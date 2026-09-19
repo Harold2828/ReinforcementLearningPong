@@ -141,8 +141,106 @@ footer {
     font-size: 0.85rem;
 }
 
-footer strong {
+.view-nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+}
+
+.view-nav button {
+    min-height: 2rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    background: #2b3139;
+}
+
+.view-nav button:hover:not(:disabled) {
+    background: #2f80ed;
+}
+
+.evolution-dashboard {
+    grid-column: 2;
+    background: #20262d;
+    border: 1px solid #3a444f;
+    border-radius: 8px;
+    padding: 1rem;
+    display: grid;
+    gap: 1rem;
+}
+
+.evolution-dashboard[hidden] {
+    display: none;
+}
+
+.dash-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    align-items: baseline;
+}
+
+.dash-header h2 {
+    font-family: "Press Start 2P", "Courier New", monospace;
+    font-size: 0.9rem;
+}
+
+.dash-header strong {
     color: #47d18c;
+}
+
+.dash-header span {
+    color: #aab6c3;
+    font-size: 0.85rem;
+}
+
+.dash-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.dash-table th,
+.dash-table td {
+    border: 1px solid #3a444f;
+    padding: 0.45rem 0.6rem;
+    text-align: left;
+}
+
+.dash-table th {
+    background: #2b3139;
+    color: #aab6c3;
+}
+
+.dash-table td {
+    color: #f4f7fb;
+    vertical-align: top;
+}
+
+.dash-champion {
+    border: 1px solid #4c8c4c;
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    color: #8ce88c;
+    font-family: monospace;
+    font-size: 0.9rem;
+}
+
+.dash-events {
+    list-style: none;
+    display: grid;
+    gap: 0.35rem;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.dash-events li {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #d7dde5;
+    border-left: 3px solid #47d18c;
+    padding-left: 0.6rem;
 }
 
 @media (max-width: 900px) {
@@ -152,5 +250,9 @@ footer strong {
 
     #game-container {
         min-height: 460px;
+    }
+
+    .evolution-dashboard {
+        grid-column: 1;
     }
 }

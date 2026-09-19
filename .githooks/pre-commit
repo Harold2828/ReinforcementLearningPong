@@ -72,7 +72,11 @@ printf '%s\n' "$changed" | while IFS= read -r file; do
                 echo "pre-commit: Node.js is required to check staged JavaScript" >&2
                 exit 1
             fi
-            git show ":$file" | node --check
+            if git show ":$file" | grep -m1 -E -q '^[[:space:]]*(import|export)[[:space:]]'; then
+                git show ":$file" | node --input-type=module --check
+            else
+                git show ":$file" | node --check
+            fi
             ;;
     esac
 done

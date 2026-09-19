@@ -76,7 +76,8 @@ export class DashboardController {
         this.setText("epsilon", Number(state.epsilon).toFixed(3));
         this.setText("opponentEpsilon", Number(state.opponentEpsilon).toFixed(3));
         this.setText("score", `${state.scoreAgent} - ${state.scoreOpponent}`);
-        this.setText("ownership", `Left: ${state.opponentOwner} | Right: ${state.agentOwner}`);
+        const agentOwnerLabel = state.agentOwner === "Frozen Champion" ? `${state.agentOwner} (MOCK)` : state.agentOwner;
+        this.setText("ownership", `Left: ${state.opponentOwner} | Right: ${agentOwnerLabel}`);
         this.setText("learningStatus", state.learningEnabled ? "Learning enabled" : "Learning disabled");
         this.setText("algorithm", state.algorithm);
         this.setText(

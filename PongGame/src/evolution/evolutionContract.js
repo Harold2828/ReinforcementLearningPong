@@ -1,0 +1,172 @@
+/**
+ * SPEC-03 frontend data contract.
+ * Backend authoritative simulation is NOT yet wired (SPEC-05/06); the mock
+ * feed, evolution scenes, and dashboard are built against this contract.
+ */
+
+export const EVOLUTION_VIEWS = Object.freeze({
+    CLASSIC: "classic",
+    EVOLUTION_TRAINING: "evolution-training",
+    EVOLUTION_DASHBOARD: "evolution-dashboard",
+    HUMAN_VS_CHAMPION: "human-vs-champion",
+});
+
+export const ARENA_COUNT = 5;
+export const AGENT_COUNT = 10;
+export const AGENTS_PER_ARENA = 2;
+
+export const EVOLUTION_EVENT_TYPES = Object.freeze({
+    MATCH_SNAPSHOT: "match_snapshot",
+    POPULATION: "population",
+    EVALUATION: "evaluation",
+    CHAMPION_PROMOTION: "champion_promotion",
+    CONTROLLED_ERROR: "controlled_error",
+});
+
+export const ARENA_IDS = Object.freeze(["arena-0", "arena-1", "arena-2", "arena-3", "arena-4"]);
+
+export const MATCH_STATUS = Object.freeze({
+    RUNNING: "running",
+    TERMINAL: "terminal",
+});
+
+export const SOURCE_LABEL = Object.freeze({
+    MOCK: "MOCK",
+    note: "Authoritative backend snapshots (SPEC-05/06) are not wired yet; visualizations run on clearly labeled mock data.",
+});
+
+function presentObjectFields(value) {
+    const fields = value ?? {};
+    if (typeof fields !== "object" || Array.isArray(fields)) {
+        return { x: undefined, y: undefined, vx: undefined, vy: undefined };
+    }
+    return fields;
+}
+
+function finiteNumber(value) {
+    return typeof value === "number" && Number.isFinite(value);
+}
+
+function isSupportedArena(arenaId) {
+    return ARENA_IDS.includes(arenaId);
+}
+
+function isSupportedStatus(status) {
+    return Object.values(MATCH_STATUS).includes(status);
+}
+
+/** Validates a match snapshot envelope. Returns { ok, errors }. */
+export function validateMatchSnapshot(envelope) {
+    const errors = [];
+    if (envelope?.type !== EVOLUTION_EVENT_TYPES.MATCH_SNAPSHOT) {
+        errors.push("type must be match_snapshot");
+    }
+    for (const key of ["runId", "generationId", "matchId", "arenaId"]) {
+        if (typeof envelope?.[key] !== "string" || envelope[key].length === 0) {
+            errors.push(`${key} must be a non-empty string`);
+        }
+    }
+    if (!isSupportedArena(envelope?.arenaId)) {
+        errors.push(`arenaId must be one of ${ARENA_IDS.join(", ")}`);
+    }
+    if (!Number.isInteger(envelope?.sequence) || envelope.sequence < 1) {
+        errors.push("sequence must be a positive integer");
+    }
+    if (!Number.isInteger(envelope?.step) || envelope.step < 0) {
+        errors.push("step must be a non-negative integer");
+    }
+    if (!Number.isInteger(envelope?.elapsedSteps) || envelope.elapsedSteps < 0) {
+        errors.push("elapsedSteps must be a non-negative integer");
+    }
+    if (!finiteNumber(envelope?.stateTimestamp)) {
+        errors.push("stateTimestamp must be a finite number");
+    }
+    if (!isSupportedStatus(envelope?.status)) {
+        errors.push(`status must be one of ${Object.values(MATCH_STATUS).join(", ")}`);
+    }
+    for (const side of ["agentA", "agentB"]) {
+        const participant = envelope?.[side];
+        if (typeof participant?.id !== "string" || participant.id.length === 0) {
+            errors.push(`${side}.id must be a non-empty string`);
+        }
+        if (!Number.isInteger(participant?.generation)) {
+            errors.push(`${side}.generation must be an integer`);
+        }
+        if (!finiteNumber(participant?.paddleX) || !finiteNumber(participant?.paddleY)) {
+            errors.push(`${side} paddle coordinates must be finite`);
+        }
+        if (!finiteNumber(participant?.epsilon)) {
+            errors.push(`${side}.epsilon must be a finite number`);
+        }
+    }
+    const ball = presentObjectFields(envelope?.ball);
+    for (const key of ["x", "y", "vx", "vy"]) {
+        if (!finiteNumber(ball[key])) {
+            errors.push(`ball.${key} must be a finite number`);
+        }
+    }
+    return { ok: errors.length === 0, errors };
+}
+
+/** Validates a population event envelope. Returns { ok, errors }. */
+export function validatePopulationEvent(envelope) {
+    const errors = [];
+    if (envelope?.type !== EVOLUTION_EVENT_TYPES.POPULATION) {
+        errors.push("type must be population");
+    }
+    if (typeof envelope?.runId !== "string") {
+        errors.push("runId must be a string");
+    }
+    if (!Array.isArray(envelope?.agents) || envelope.agents.length !== AGENT_COUNT) {
+        errors.push(`agents must be an array of exactly ${AGENT_COUNT} members`);
+    }
+    return { ok: errors.length === 0, errors };
+}
+
+/**
+ * True when an incoming snapshot belongs to the same match session as the
+ * current one and is not newer (stale or out-of-order). New sessions always
+ * reset the sequence baseline so sequence restarts must not be rejected.
+ */
+export function isStaleMatchSnapshot(currentArena, incoming) {
+    if (!currentArena || !incoming) {
+        return false;
+    }
+    if (currentArena.matchId !== incoming.matchId) {
+        return false;
+    }
+    return incoming.sequence <= currentArena.sequence;
+}
+
+/** Five-court responsive layout for an 800x600-style viewport. */
+export function layoutArenas(width, height, arenaCount = ARENA_COUNT) {
+    const padding = 10;
+    const columns = 3;
+    const cellGap = 8;
+    const topRowCount = Math.min(columns, arenaCount);
+    const bottomRowCount = Math.max(0, arenaCount - topRowCount);
+    const headerHeight = 60;
+
+    const usableWidth = Math.max(1, width - padding * 2 - cellGap * (columns - 1));
+    const cellWidth = usableWidth / columns;
+    const rowHeight = Math.max(1, (height - padding * 2 - headerHeight - cellGap) / 2);
+
+    const startColumn = Math.floor((columns - bottomRowCount) / 2);
+    const arenas = [];
+    for (let index = 0; index < arenaCount; index += 1) {
+        const isTopRow = index < topRowCount;
+        const rowIndex = isTopRow ? 0 : 1;
+        const slots = isTopRow ? columns : bottomRowCount;
+        const columnIndex = isTopRow ? index : index - topRowCount;
+        const columnOffset = isTopRow ? 0 : startColumn;
+        arenas.push({
+            index,
+            arenaId: ARENA_IDS[index],
+            x: padding + (columnIndex + columnOffset) * (cellWidth + cellGap),
+            y: padding + headerHeight + rowIndex * (rowHeight + cellGap),
+            width: Math.round(cellWidth),
+            height: Math.round(rowHeight),
+        });
+    }
+    return arenas;
+}

@@ -113,6 +113,22 @@ describe("DashboardController", () => {
         expect(document.querySelector("[data-action='stop-training']").disabled).toBe(false);
     });
 
+    it("labels the mock champion visibly in ownership", () => {
+        renderDashboard();
+        const controller = new DashboardController(document);
+
+        controller.update({
+            connected: true,
+            mode: "Human vs Champion",
+            opponentOwner: "Human",
+            agentOwner: "Frozen Champion",
+            learningEnabled: false,
+        });
+
+        expect(document.querySelector("[data-ui='ownership']").textContent).toBe("Left: Human | Right: Frozen Champion (MOCK)");
+        expect(document.querySelector("[data-ui='learning-status']").textContent).toBe("Learning disabled");
+    });
+
     it("keeps previous connection state across partial updates", () => {
         renderDashboard();
         const controller = new DashboardController(document);

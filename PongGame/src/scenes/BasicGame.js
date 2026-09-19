@@ -11,6 +11,7 @@ import {
     pointWinnerForBoundary,
 } from "../utils/gameState";
 import { GameModeManager } from "../utils/gameModeManager";
+import { championDecision } from "../utils/championController";
 
 class BasicGame extends Phaser.Scene {
     constructor() {
@@ -101,9 +102,17 @@ class BasicGame extends Phaser.Scene {
         this.background.ball.image.body.onWorldBounds = true;
     }
 
-    update() {
+update() {
         this.actors.players[0].racket.setVelocityY(0);
         this.actors.players[1].racket.setVelocityY(0);
+
+        const isChampion = this.gameModeManager.isChampionMode();
+        if (isChampion) {
+            this.pendingAgentAction = championDecision(
+                this.background.ball.image,
+                this.actors.players[0].racket,
+            );
+        }
 
         let stateWasSent = false;
         if (this.trainingActive) {
@@ -114,7 +123,9 @@ class BasicGame extends Phaser.Scene {
                 applyAgentActionToPaddle(this.actors.players[1].racket, this.pendingOpponentAction);
             }
             this.handleHumanControlsByMode();
-            stateWasSent = this.sendTrainingState();
+            if (!isChampion) {
+                stateWasSent = this.sendTrainingState();
+            }
         } else {
             this.handleHumanControlsByMode();
         }
@@ -319,6 +330,10 @@ class BasicGame extends Phaser.Scene {
     }
 
     startTraining() {
+        if (this.gameModeManager.isChampionMode()) {
+            this.dashboardController.update({ feedback: "Champion mode is frozen — training is not enabled" });
+            return;
+        }
         this.trainingActive = true;
         this.dashboardController.setTrainingActive(true);
         this.socketManager.startTraining();
@@ -326,6 +341,10 @@ class BasicGame extends Phaser.Scene {
     }
 
     stopTraining() {
+        if (this.gameModeManager.isChampionMode()) {
+            this.dashboardController.update({ feedback: "Champion mode is frozen — training is not enabled" });
+            return;
+        }
         this.trainingActive = false;
         this.pendingAgentAction = ACTIONS.STAY;
         this.pendingOpponentAction = ACTIONS.STAY;
@@ -361,9 +380,11 @@ class BasicGame extends Phaser.Scene {
         this.previousOpponentDistanceToBall = null;
         this.pendingAgentAction = ACTIONS.STAY;
         this.pendingOpponentAction = ACTIONS.STAY;
-        this.awaitingAiMove = false;
+this.awaitingAiMove = false;
         this.resetBall();
-        this.socketManager.resetEpisode();
+        if (!this.gameModeManager.isChampionMode()) {
+            this.socketManager.resetEpisode();
+        }
         this.dashboardController.update({
             scoreAgent: 0,
             scoreOpponent: 0,

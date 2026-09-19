@@ -5,6 +5,7 @@ export const GAME_MODES = Object.freeze({
     AI_VS_AI: "AI_VS_AI",
     TRAINING_SELF_PLAY: "TRAINING_SELF_PLAY",
     EVALUATION: "EVALUATION",
+    HUMAN_VS_CHAMPION: "HUMAN_VS_CHAMPION",
 });
 
 export const GAME_MODE_LABELS = Object.freeze({
@@ -14,6 +15,7 @@ export const GAME_MODE_LABELS = Object.freeze({
     [GAME_MODES.AI_VS_AI]: "AI vs AI",
     [GAME_MODES.TRAINING_SELF_PLAY]: "Training Self-Play",
     [GAME_MODES.EVALUATION]: "Evaluation",
+    [GAME_MODES.HUMAN_VS_CHAMPION]: "Human vs Champion",
 });
 
 const MODE_OWNERSHIP = Object.freeze({
@@ -47,6 +49,11 @@ const MODE_OWNERSHIP = Object.freeze({
         agent: "AI Agent",
         learningEnabled: false,
     },
+    [GAME_MODES.HUMAN_VS_CHAMPION]: {
+        opponent: "Human",
+        agent: "Frozen Champion",
+        learningEnabled: false,
+    },
 });
 
 export class GameModeManager {
@@ -68,14 +75,24 @@ export class GameModeManager {
         return Object.values(GAME_MODES).includes(gameMode);
     }
 
-    isAgentAiControlled() {
-        return [GAME_MODES.HUMAN_VS_AI, GAME_MODES.HUMAN_VS_AI_TRAINING, GAME_MODES.AI_VS_AI, GAME_MODES.TRAINING_SELF_PLAY, GAME_MODES.EVALUATION]
-            .includes(this.currentMode);
+isAgentAiControlled() {
+        return [
+            GAME_MODES.HUMAN_VS_AI,
+            GAME_MODES.HUMAN_VS_AI_TRAINING,
+            GAME_MODES.AI_VS_AI,
+            GAME_MODES.TRAINING_SELF_PLAY,
+            GAME_MODES.EVALUATION,
+            GAME_MODES.HUMAN_VS_CHAMPION,
+        ].includes(this.currentMode);
     }
 
     isOpponentAiControlled() {
         return [GAME_MODES.AI_VS_HUMAN, GAME_MODES.AI_VS_AI, GAME_MODES.TRAINING_SELF_PLAY, GAME_MODES.EVALUATION]
             .includes(this.currentMode);
+    }
+
+    isChampionMode() {
+        return this.currentMode === GAME_MODES.HUMAN_VS_CHAMPION;
     }
 
     isAgentHumanControlled() {

@@ -15,6 +15,12 @@
       <div class="logo">
       </div>
       <h1>Reinforcement Learning Pong Game</h1>
+      <nav class="view-nav" aria-label="View switcher">
+        <button type="button" data-action="switch-view" data-view="classic">Classic 1v1</button>
+        <button type="button" data-action="switch-view" data-view="evolution-training">Evolution Training</button>
+        <button type="button" data-action="switch-view" data-view="human-vs-champion">Human vs Champion</button>
+        <button type="button" data-action="switch-view" data-view="evolution-dashboard">Evolution Dashboard</button>
+      </nav>
     </header>
     <main>
       <aside class="training-panel" aria-label="Training dashboard">
@@ -31,6 +37,7 @@
             <option value="AI_VS_AI">AI vs AI</option>
             <option value="TRAINING_SELF_PLAY">Training Self-Play</option>
             <option value="EVALUATION">Evaluation</option>
+            <option value="HUMAN_VS_CHAMPION">Human vs Champion</option>
           </select>
         </label>
         <div class="metrics-grid">
@@ -107,6 +114,31 @@
       </aside>
       <section id="game-container" aria-label="Game Container">
         <!-- Game will be rendered here -->
+      </section>
+      <section data-dash-role="dashboard" class="evolution-dashboard" aria-label="Evolution dashboard" hidden>
+        <div class="dash-header">
+          <h2>Evolution Dashboard</h2>
+          <strong data-dash-role="status">Waiting for events</strong>
+          <span data-dash-role="source">Mock visualization pending (SPEC-05/06)</span>
+        </div>
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Role</th>
+              <th>Layers</th>
+              <th>Widths</th>
+              <th>Fitness components</th>
+              <th>Lineage</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody data-dash-role="population"></tbody>
+        </table>
+        <h3>Champion</h3>
+        <div data-dash-role="champion" class="dash-champion">No champion promotion yet</div>
+        <h3>Run events</h3>
+        <ul data-dash-role="events" class="dash-events"></ul>
       </section>
     </main>
     <footer>
