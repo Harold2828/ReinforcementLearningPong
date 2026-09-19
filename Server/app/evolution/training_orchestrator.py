@@ -12,6 +12,7 @@ within one round of overshoot.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import copy
 import json
 from pathlib import Path
 import random
@@ -21,12 +22,13 @@ import time
 from typing import Callable, Sequence
 
 import numpy as np
+import torch
 
 from ..ai.dqn_agent import DQNConfiguration, DQNAgent, pong_state_to_vector
 from ..ai.multi_agent_training_service import TRAINING_SELF_PLAY
 from ..ai.q_learning_agent import PongState
 from ..persistence.store import EvolutionStore
-from .genetic import GeneticAlgorithm, GeneticConfiguration
+from .genetic import GeneticAlgorithm, GeneticConfiguration, GenerationPlan, lineage_records
 from .genome import Genome
 from .simulation import (
     ARENA_IDS,
@@ -175,6 +177,9 @@ class AgentRecord:
     index: int
     storeId: int
     dqn: DQNAgent
+    generation: int = 0
+    role: str = AGENT_ROLE_INITIAL
+    inheritance: dict | None = None
     previousState: np.ndarray | None = None
     previousAction: int | None = None
     hits: int = 0
@@ -228,7 +233,11 @@ class EvolutionTrainingService:
         benchmarkDefinition: str = "spec-06-isolated-round-robin",
         genomes: Sequence[Genome] | None = None,
         onEvent: Callable[[dict], None] | None = None,
+        evaluationConfiguration=None,
+        fitnessConfiguration=None,
     ):
+        from .evaluation import EvaluationConfiguration, FitnessConfiguration
+
         self.store = store
         self.configuration = configuration or EvolutionTrainingConfiguration()
         self.configuration.validate()
@@ -240,12 +249,15 @@ class EvolutionTrainingService:
         self.codeRevision = codeRevision
         self.benchmarkDefinition = benchmarkDefinition
         self.on_event = onEvent
+        self.evaluationConfiguration = evaluationConfiguration or EvaluationConfiguration()
+        self.fitnessConfiguration = fitnessConfiguration or FitnessConfiguration()
         self.controller = RunController()
+        self.geneticAlgorithm = GeneticAlgorithm(self.geneticConfiguration)
         provided = list(genomes) if genomes is not None else None
         self.genomes: tuple[Genome, ...] = (
             tuple(provided)
             if provided is not None
-            else GeneticAlgorithm(self.geneticConfiguration).initial_population()
+            else self.geneticAlgorithm.initial_population()
         )
         targetPopulation = 2 * len(ARENA_IDS)
         if len(self.genomes) != targetPopulation:
@@ -257,9 +269,11 @@ class EvolutionTrainingService:
         self.runId: int | None = None
         self.generationId: int | None = None
         self.runUuid: str | None = None
+        self.generationIndex = 0
         self._roundIndex = 0
         self._sideLastReturns: dict[tuple[str, str], int] = {}
         self._lastSequences: dict[str, int] = {}
+        self._eliteInheritanceVerified = True
 
     def _emit(self, event: dict) -> None:
         if self.on_event is not None:
@@ -273,6 +287,7 @@ class EvolutionTrainingService:
         maxRounds: int | None = None,
     ) -> dict:
         self._roundIndex = 0
+        self.generationIndex = 0
         self.runUuid = runUuid
         self.agents = []
         self.runId = self.store.create_run(
@@ -327,22 +342,242 @@ class EvolutionTrainingService:
             "agents": self._agent_summaries(),
         }
 
-    def _build_agents(self, seed: int) -> None:
+    def run_evolution(
+        self,
+        runUuid: str = "spec-07-run",
+        seed: int = 0,
+        fitnessFormula: str = "0.65*winRate + 0.25*pointDifferential + 0.10*comboPerformance",
+        evaluationConfiguration=None,
+        fitnessConfiguration=None,
+    ) -> dict:
+        """Train, evaluate, and reproduce a complete configurable run."""
+        from .evaluation import EvaluationConfiguration, FitnessConfiguration, FixedOpponentEvaluator
+
+        evaluationConfiguration = evaluationConfiguration or self.evaluationConfiguration
+        fitnessConfiguration = fitnessConfiguration or self.fitnessConfiguration
+        evaluator = FixedOpponentEvaluator(evaluationConfiguration, fitnessConfiguration, self.matchConfig)
+        self.runUuid = runUuid
+        self.runId = self.store.create_run(
+            runUuid,
+            {
+                **asdict(self.configuration),
+                "evaluation": asdict(evaluationConfiguration),
+                "fitness": asdict(fitnessConfiguration),
+            },
+            seed,
+            self.codeRevision,
+            fitnessFormula,
+            evaluationConfiguration.benchmarkVersion,
+        )
+        generationSummaries = []
+        pendingPlan: GenerationPlan | None = None
+        previousAgents: list[AgentRecord] = []
+        try:
+            for generationIndex in range(self.configuration.maxGenerations):
+                self.generationIndex = generationIndex
+                self._roundIndex = 0
+                self.generationId = self.store.start_generation(self.runId, generationIndex)
+                self.agents = []
+                self._eliteInheritanceVerified = True
+                self._build_agents(
+                    _mix(seed, generationIndex),
+                    generationIndex=generationIndex,
+                    plan=pendingPlan,
+                    previousAgents=previousAgents,
+                )
+                if pendingPlan is not None:
+                    for row in lineage_records(
+                        pendingPlan,
+                        [agent.storeId for agent in previousAgents],
+                        [agent.storeId for agent in self.agents],
+                    ):
+                        self.store.record_parentage(**row)
+                self._emit_population()
+                self._train_to_budget(seed)
+                if self.controller.stopRequested:
+                    self.store.abort_generation(self.generationId)
+                    self.store.set_run_status(self.runId, "cancelled")
+                    break
+
+                evaluation = evaluator.evaluate(
+                    [agent.dqn for agent in self.agents], generationIndex
+                )
+                for agent, result in zip(self.agents, evaluation):
+                    self.store.record_evaluation(
+                        agent.storeId,
+                        self.runId,
+                        evaluationConfiguration.benchmarkVersion,
+                        {
+                            key: result[key]
+                            for key in ("winRate", "pointDifferential", "comboPerformance")
+                        },
+                        result["sampleCount"],
+                        {"stepCapTerminations": result["stepCapTerminations"]},
+                        result["fitness"],
+                    )
+                self._save_checkpoints()
+                self.store.complete_generation(self.generationId)
+
+                nextPlan = None
+                if generationIndex + 1 < self.configuration.maxGenerations:
+                    nextPlan = self.geneticAlgorithm.next_generation(
+                        self.genomes, [item["fitness"] for item in evaluation]
+                    )
+                generationSummaries.append(
+                    {
+                        "generation": generationIndex,
+                        "generationId": self.generationId,
+                        "populationSize": len(self.agents),
+                        "rounds": self._roundIndex,
+                        "evaluation": evaluation,
+                        "selectedParentIndices": (
+                            list(nextPlan.parentPoolIndices) if nextPlan is not None else []
+                        ),
+                        "eliteParentIndices": (
+                            [elite.parentIndex for elite in nextPlan.elites] if nextPlan is not None else []
+                        ),
+                        "offspringCount": len(nextPlan.offspring) if nextPlan is not None else 0,
+                        "eliteInheritanceVerified": self._eliteInheritanceVerified,
+                    }
+                )
+                self._emit(
+                    {
+                        "type": "evaluation",
+                        "source": EVENT_SOURCE_LIVE,
+                        "runId": self.runId,
+                        "generationId": self.generationId,
+                        "benchmark": evaluationConfiguration.benchmarkVersion,
+                        "results": [
+                            {"agentId": agent.index, "fitness": result}
+                            for agent, result in zip(self.agents, evaluation)
+                        ],
+                    }
+                )
+                previousAgents = self.agents
+                pendingPlan = nextPlan
+                if nextPlan is not None:
+                    self.genomes = nextPlan.genomes
+            completed = len(generationSummaries) == self.configuration.maxGenerations
+            self.store.set_run_status(self.runId, "completed" if completed else "cancelled")
+            return {
+                "runId": self.runId,
+                "runUuid": runUuid,
+                "status": "completed" if completed else "cancelled",
+                "generations": generationSummaries,
+            }
+        except BaseException:
+            if self.generationId is not None:
+                self.store.abort_generation(self.generationId)
+            self.store.set_run_status(self.runId, "cancelled")
+            raise
+
+    def _train_to_budget(self, seed: int) -> None:
+        budget = self.configuration.stepsPerAgentPerGeneration
+        cycle = len(self.agents) - 1
+        roundCap = int(np.ceil(budget / self.configuration.roundTicks)) + cycle
+        while self._roundIndex < roundCap and self._any_below_budget(budget):
+            if not self.controller.wait_if_paused():
+                return
+            self._roundIndex += 1
+            self._run_round(seed, self._roundIndex)
+            if self._roundIndex % self.configuration.metricsInterval == 0:
+                self._emit_metrics()
+            if self.controller.stopRequested:
+                return
+
+    def _build_agents(
+        self,
+        seed: int,
+        generationIndex: int = 0,
+        plan: GenerationPlan | None = None,
+        previousAgents: Sequence[AgentRecord] = (),
+    ) -> None:
         for index, genome in enumerate(self.genomes):
             rng = random.Random(_mix(seed, index))
+            torch.manual_seed(_mix(seed, index, generationIndex))
             dqn = DQNAgent(
                 configuration=self.dqnConfiguration,
                 hiddenWidths=genome,
                 device=self.configuration.device,
                 randomGenerator=rng,
             )
+            role = AGENT_ROLE_INITIAL
+            inheritance = None
+            if plan is not None:
+                role = "elite" if index < self.geneticConfiguration.elitismCount else "offspring"
+                inheritance = self._inherit_weights(dqn, index, plan, previousAgents)
             storeId = self.store.register_agent(
-                f"run-{self.runUuid}-gen-0-agent-{index}",
+                f"run-{self.runUuid}-gen-{generationIndex}-agent-{index}",
                 self.generationId,
-                AGENT_ROLE_INITIAL,
+                role,
                 json.dumps(genome.to_json()),
             )
-            self.agents.append(AgentRecord(index=index, storeId=storeId, dqn=dqn))
+            self.agents.append(
+                AgentRecord(
+                    index=index,
+                    storeId=storeId,
+                    dqn=dqn,
+                    generation=generationIndex,
+                    role=role,
+                    inheritance=inheritance,
+                )
+            )
+
+    @staticmethod
+    def _inherit_weights(
+        child: DQNAgent,
+        childIndex: int,
+        plan: GenerationPlan,
+        previousAgents: Sequence[AgentRecord],
+    ) -> dict:
+        if childIndex < len(plan.elites):
+            parentIndex = plan.elites[childIndex].parentIndex
+            parent = previousAgents[parentIndex].dqn
+            child.policy_net.load_state_dict(copy.deepcopy(parent.policy_net.state_dict()))
+            child.target_net.load_state_dict(copy.deepcopy(parent.target_net.state_dict()))
+            for childNetwork, parentNetwork in (
+                (child.policy_net, parent.policy_net),
+                (child.target_net, parent.target_net),
+            ):
+                if any(
+                    not np.array_equal(
+                        childNetwork.state_dict()[key].detach().cpu().numpy(),
+                        tensor.detach().cpu().numpy(),
+                    )
+                    for key, tensor in parentNetwork.state_dict().items()
+                ):
+                    raise RuntimeError("elite tensor inheritance changed parameters")
+            return {
+                "policy": "elite_exact_copy",
+                "parentIndex": parentIndex,
+                "copiedKeys": sorted(parent.policy_net.state_dict()),
+                "skippedKeys": [],
+                "targetSynchronized": False,
+            }
+        offspring = next(item for item in plan.offspring if item.childIndex == childIndex)
+        parent = previousAgents[offspring.parentAIndex].dqn
+        childState = child.policy_net.state_dict()
+        parentState = parent.policy_net.state_dict()
+        compatible = {
+            key: tensor.detach().clone()
+            for key, tensor in parentState.items()
+            if key in childState and childState[key].shape == tensor.shape
+        }
+        skipped = sorted(
+            key
+            for key in set(childState) | set(parentState)
+            if key not in compatible
+        )
+        childState.update(compatible)
+        child.policy_net.load_state_dict(childState)
+        child.target_net.load_state_dict(copy.deepcopy(child.policy_net.state_dict()))
+        return {
+            "policy": "compatible_tensors_only",
+            "parentIndex": offspring.parentAIndex,
+            "copiedKeys": sorted(compatible),
+            "skippedKeys": skipped,
+            "targetSynchronized": True,
+        }
 
     def _emit_population(self) -> None:
         self._emit(
@@ -374,12 +609,12 @@ class EvolutionTrainingService:
                     generationId=f"generation-{self.generationId}",
                     agentA=MatchParticipant(
                         agentId=f"agent-{aIndex}",
-                        generation=0,
+                        generation=self.generationIndex,
                         epsilon=float(agentA.dqn.epsilonValue),
                     ),
                     agentB=MatchParticipant(
                         agentId=f"agent-{bIndex}",
-                        generation=0,
+                        generation=self.generationIndex,
                         epsilon=float(agentB.dqn.epsilonValue),
                     ),
                     reversedSides=reversedSides,
@@ -492,7 +727,7 @@ class EvolutionTrainingService:
             pointWinner = envelope["pointWinner"]
             combo = envelope["combo"] if envelope["status"] == TERMINAL else 0
             self.store.record_match(
-                match_uuid=f"match-{self.runUuid}-gen-0-round-{roundIndex}-arena-{arenaIndex}",
+                match_uuid=f"match-{self.runUuid}-gen-{self.generationIndex}-round-{roundIndex}-arena-{arenaIndex}",
                 run_id=self.runId,
                 arena=envelope["arenaId"],
                 agent_a_id=self.agents[aIndex].storeId,
@@ -518,7 +753,9 @@ class EvolutionTrainingService:
             for agent in self.agents:
                 temporaryPath = Path(tempDir) / f"agent-{agent.index}.pt"
                 agent.dqn.save(temporaryPath)
-                relativePath = f"run-{self.runUuid}/generation-0/agent-{agent.index}.pt"
+                relativePath = (
+                    f"run-{self.runUuid}/generation-{self.generationIndex}/agent-{agent.index}.pt"
+                )
                 relative, sha256 = self.store.checkpoints.write_bytes(
                     relativePath, temporaryPath.read_bytes()
                 )
@@ -535,10 +772,11 @@ class EvolutionTrainingService:
             {
                 "agentId": agent.index,
                 "storeId": agent.storeId,
-                "generation": 0,
+                "generation": agent.generation,
                 "architecture": self.genomes[agent.index].to_json(),
                 "fitness": None,
-                "role": AGENT_ROLE_INITIAL,
+                "role": agent.role,
+                "weightInheritance": agent.inheritance,
                 "status": "available",
                 "games": agent.wins + agent.losses,
                 "wins": agent.wins,

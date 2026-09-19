@@ -22,6 +22,8 @@ def test_configuration_rejects_invalid_population_splits():
         GeneticConfiguration(parentPoolSize=0).validate()
     with pytest.raises(ValueError):
         GeneticConfiguration(mutationProbability=-0.1).validate()
+    with pytest.raises(ValueError):
+        GeneticConfiguration(weightTransfer="average").validate()
 
 
 def test_genome_rejects_out_of_bounds_depth_and_widths():

@@ -46,6 +46,8 @@ class GeneticConfiguration:
             raise ValueError("hidden layer bounds must satisfy 1 <= min <= max")
         if not self.allowedWidths or any(width <= 0 for width in self.allowedWidths):
             raise ValueError("allowedWidths must be a non-empty tuple of positive integers")
+        if self.weightTransfer != "compatible_tensors_only":
+            raise ValueError("weightTransfer must be 'compatible_tensors_only'")
 
 
 @dataclass(frozen=True)

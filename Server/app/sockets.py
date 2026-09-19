@@ -110,7 +110,10 @@ def register_evolution_sockets(socketio, evolutionTrainingService) -> None:
 
 def _run_evolution_thread(service, runUuid: str, seed: int, fitnessFormula: str) -> None:
     try:
-        summary = service.run_generation(runUuid=runUuid, seed=seed, fitnessFormula=fitnessFormula)
+        kwargs = {"runUuid": runUuid, "seed": seed}
+        if fitnessFormula:
+            kwargs["fitnessFormula"] = fitnessFormula
+        summary = service.run_evolution(**kwargs)
         if service.on_event is not None:
             service.on_event({**summary, "type": "run_finished", "source": "LIVE"})
     except BaseException as error:

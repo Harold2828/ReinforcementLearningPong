@@ -66,6 +66,7 @@ def create_evolution_training_service(serverRoot: Path):
     unless overridden.
     """
     from ..evolution.genetic import GeneticConfiguration
+    from ..evolution.evaluation import EvaluationConfiguration, FitnessConfiguration
     from ..evolution.training_orchestrator import (
         EvolutionTrainingConfiguration,
         EvolutionTrainingService,
@@ -79,6 +80,7 @@ def create_evolution_training_service(serverRoot: Path):
     configuration = EvolutionTrainingConfiguration(
         stepsPerAgentPerGeneration=int(os.getenv("EVOLUTION_STEPS_PER_AGENT", "100000")),
         roundTicks=int(os.getenv("EVOLUTION_ROUND_TICKS", "1000")),
+        maxGenerations=int(os.getenv("EVOLUTION_MAX_GENERATIONS", "1")),
         winScore=int(os.getenv("EVOLUTION_WIN_SCORE", "7")),
         device=os.getenv("EVOLUTION_DEVICE", "cpu").strip().lower(),
     )
@@ -89,13 +91,33 @@ def create_evolution_training_service(serverRoot: Path):
         batchSize=int(os.getenv("EVOLUTION_BATCH_SIZE", "64")),
         epsilonDecaySteps=int(os.getenv("EVOLUTION_EPSILON_DECAY_STEPS", "100000")),
     )
+    evaluationConfiguration = EvaluationConfiguration(
+        seeds=tuple(
+            int(value.strip())
+            for value in os.getenv("EVOLUTION_EVALUATION_SEEDS", "101,211,307").split(",")
+            if value.strip()
+        ),
+        maxStepsPerMatch=int(os.getenv("EVOLUTION_EVALUATION_MAX_STEPS", "2000")),
+        winScore=int(os.getenv("EVOLUTION_EVALUATION_WIN_SCORE", "7")),
+        benchmarkVersion=os.getenv(
+            "EVOLUTION_BENCHMARK", "spec-07-fixed-tracker-v1"
+        ),
+    )
+    fitnessConfiguration = FitnessConfiguration(
+        winRateWeight=float(os.getenv("EVOLUTION_FITNESS_WIN_WEIGHT", "0.65")),
+        pointDifferentialWeight=float(os.getenv("EVOLUTION_FITNESS_POINT_WEIGHT", "0.25")),
+        comboPerformanceWeight=float(os.getenv("EVOLUTION_FITNESS_COMBO_WEIGHT", "0.10")),
+        comboCap=int(os.getenv("EVOLUTION_COMBO_CAP", "10")),
+    )
     return EvolutionTrainingService(
         store,
         configuration=configuration,
         geneticConfiguration=geneticConfiguration,
         dqnConfiguration=dqnConfiguration,
         codeRevision=os.getenv("EVOLUTION_CODE_REVISION", ""),
-        benchmarkDefinition=os.getenv("EVOLUTION_BENCHMARK", "spec-06-isolated-round-robin"),
+        benchmarkDefinition=os.getenv("EVOLUTION_BENCHMARK", "spec-07-fixed-tracker-v1"),
+        evaluationConfiguration=evaluationConfiguration,
+        fitnessConfiguration=fitnessConfiguration,
     )
 
 
