@@ -3,6 +3,7 @@ set -eu
 
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
+hook_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 changed_file=$(mktemp)
 test_file=$(mktemp)
@@ -27,58 +28,30 @@ done
 sort -u "$changed_file" -o "$changed_file"
 
 frontend=0
-spec01=0
-spec02=0
-while IFS= read -r file; do
-    case "$file" in
-        Server/app/persistence/*|Server/tests/test_persistence_*.py)
-            spec01=1
-            printf '%s\n' Server/tests/test_persistence_db.py Server/tests/test_persistence_store.py \
-                Server/tests/test_persistence_checkpoints.py >> "$test_file"
-            ;;
-        Server/app/evolution/fitness.py|Server/app/evolution/evaluation.py|Server/app/evaluation/*|Server/tests/test_fitness*.py|Server/tests/test_evaluation*.py)
-            fitness_tests=$(find Server/tests -maxdepth 1 -type f \
-                \( -name 'test_fitness*.py' -o -name 'test_evaluation*.py' \))
-            if [ -z "$fitness_tests" ]; then
-                echo "pre-push: fitness/evaluation changed but no targeted tests exist" >&2
-                exit 1
-            fi
-            printf '%s\n' "$fitness_tests" >> "$test_file"
-            ;;
-        Server/app/evolution/*|Server/tests/test_evolution_*.py)
-            spec02=1
-            printf '%s\n' Server/tests/test_evolution_genetic.py >> "$test_file"
-            ;;
-        Server/app/ai/dqn_agent.py|Server/app/ai/model.py|Server/tests/test_dqn_agent.py)
-            printf '%s\n' Server/tests/test_dqn_agent.py >> "$test_file"
-            ;;
-        Server/app/ai/q_learning_agent.py|Server/tests/test_q_learning_agent.py)
-            printf '%s\n' Server/tests/test_q_learning_agent.py >> "$test_file"
-            ;;
-        Server/app/ai/pong_training_env.py|Server/app/ai/neural_training_service.py|Server/app/ai/multi_agent_training_service.py|Server/tests/test_pong_training_env.py|Server/tests/test_neural_training_service.py|Server/tests/test_multi_agent_training_service.py)
-            printf '%s\n' Server/tests/test_pong_training_env.py \
-                Server/tests/test_neural_training_service.py \
-                Server/tests/test_multi_agent_training_service.py >> "$test_file"
-            ;;
-        Server/app/ai/service_factory.py|Server/app/sockets.py|Server/tests/test_sockets.py)
-            printf '%s\n' Server/tests/test_sockets.py \
-                Server/tests/test_neural_training_service.py \
-                Server/tests/test_multi_agent_training_service.py >> "$test_file"
-            ;;
-        Server/tests/test_*.py)
-            printf '%s\n' "$file" >> "$test_file"
-            ;;
-        PongGame/src/*|PongGame/package.json|PongGame/package-lock.json)
-            frontend=1
-            ;;
-    esac
-done < "$changed_file"
+while IFS=';' read -r label pattern targets; do
+    case "$label" in ''|'#'*) continue ;; esac
+    grep -E -q "$pattern" "$changed_file" || continue
+    for target in $targets; do
+        case "$target" in
+            @frontend) frontend=1 ;;
+            @fitness)
+                fitness_tests=$(find Server/tests -maxdepth 1 -type f \
+                    \( -name 'test_fitness*.py' -o -name 'test_evaluation*.py' \))
+                if [ -z "$fitness_tests" ]; then
+                    echo "pre-push: $label changed but no targeted tests exist" >&2
+                    exit 1
+                fi
+                printf '%s\n' "$fitness_tests" >> "$test_file"
+                ;;
+            *) printf '%s\n' "$target" >> "$test_file" ;;
+        esac
+    done
+done < "$hook_dir/test-map.conf"
 
-if [ "$spec01" -eq 1 ] && [ "$spec02" -eq 0 ] && [ -f Server/tests/test_evolution_genetic.py ]; then
-    printf '%s\n' \
-        'Server/tests/test_evolution_genetic.py::test_lineage_records_integrate_with_spec01_store' \
-        >> "$test_file"
-fi
+# A changed test always runs even before its component is added to the map.
+while IFS= read -r file; do
+    case "$file" in Server/tests/test_*.py) printf '%s\n' "$file" >> "$test_file" ;; esac
+done < "$changed_file"
 
 if [ -s "$test_file" ]; then
     sort -u "$test_file" -o "$test_file"
