@@ -1,0 +1,171 @@
+SCHEMA_MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
+    (
+        1,
+        (
+            "CREATE TABLE IF NOT EXISTS runs ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " run_uuid TEXT NOT NULL UNIQUE,"
+            " config_json TEXT NOT NULL,"
+            " seed INTEGER NOT NULL,"
+            " code_revision TEXT NOT NULL,"
+            " fitness_formula TEXT NOT NULL,"
+            " benchmark_definition TEXT NOT NULL,"
+            " status TEXT NOT NULL DEFAULT 'running'"
+            "   CHECK (status IN ('running', 'paused', 'completed', 'cancelled')),"
+            " created_at TEXT NOT NULL,"
+            " updated_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS generations ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " run_id INTEGER NOT NULL REFERENCES runs(id),"
+            " generation_index INTEGER NOT NULL,"
+            " status TEXT NOT NULL DEFAULT 'running'"
+            "   CHECK (status IN ('running', 'completed', 'aborted')),"
+            " started_at TEXT NOT NULL,"
+            " completed_at TEXT,"
+            " UNIQUE (run_id, generation_index))",
+            "CREATE TABLE IF NOT EXISTS agents ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " agent_uuid TEXT NOT NULL UNIQUE,"
+            " generation_id INTEGER NOT NULL REFERENCES generations(id),"
+            " role TEXT NOT NULL CHECK (role IN ('initial', 'elite', 'offspring', 'champion')),"
+            " architecture_json TEXT NOT NULL,"
+            " status TEXT NOT NULL DEFAULT 'available'"
+            "   CHECK (status IN ('available', 'unavailable', 'retired')),"
+            " checkpoint_id INTEGER REFERENCES checkpoints(id) ON DELETE SET NULL,"
+            " created_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS checkpoints ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " agent_id INTEGER NOT NULL REFERENCES agents(id),"
+            " relative_path TEXT NOT NULL,"
+            " sha256 TEXT NOT NULL,"
+            " model_spec_version INTEGER NOT NULL,"
+            " checkpoint_type TEXT NOT NULL"
+            "   CHECK (checkpoint_type IN ('weights', 'optimizer', 'full')),"
+            " created_at TEXT NOT NULL,"
+            " UNIQUE (agent_id, relative_path))",
+            "CREATE TABLE IF NOT EXISTS parentage ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " child_agent_id INTEGER NOT NULL REFERENCES agents(id),"
+            " parent_agent_id INTEGER NOT NULL REFERENCES agents(id),"
+            " mutation_json TEXT,"
+            " UNIQUE (child_agent_id, parent_agent_id))",
+            "CREATE TABLE IF NOT EXISTS matches ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " match_uuid TEXT NOT NULL UNIQUE,"
+            " run_id INTEGER NOT NULL REFERENCES runs(id),"
+            " arena TEXT NOT NULL,"
+            " agent_a_id INTEGER NOT NULL REFERENCES agents(id),"
+            " agent_b_id INTEGER NOT NULL REFERENCES agents(id),"
+            " opponent_type TEXT,"
+            " game_seed INTEGER NOT NULL,"
+            " mode TEXT NOT NULL,"
+            " score_a INTEGER NOT NULL,"
+            " score_b INTEGER NOT NULL,"
+            " combos_a INTEGER NOT NULL,"
+            " combos_b INTEGER NOT NULL,"
+            " duration_steps INTEGER NOT NULL,"
+            " result_json TEXT NOT NULL,"
+            " created_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS evaluations ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " agent_id INTEGER NOT NULL REFERENCES agents(id),"
+            " run_id INTEGER NOT NULL REFERENCES runs(id),"
+            " benchmark_version TEXT NOT NULL,"
+            " metric_components_json TEXT NOT NULL,"
+            " sample_count INTEGER NOT NULL,"
+            " uncertainty_json TEXT,"
+            " fitness REAL CHECK (fitness IS NULL OR (fitness >= 0.0 AND fitness <= 1.0)),"
+            " recorded_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS champion_history ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " run_id INTEGER NOT NULL REFERENCES runs(id),"
+            " agent_id INTEGER NOT NULL REFERENCES agents(id),"
+            " event TEXT NOT NULL CHECK (event IN ('promoted', 'demoted', 'retired')),"
+            " evaluation_id INTEGER REFERENCES evaluations(id),"
+            " checkpoint_id INTEGER REFERENCES checkpoints(id),"
+            " recorded_at TEXT NOT NULL)",
+            # Triggers back up the store-level guards against raw-SQL bypass; UPDATE mirrors INSERT
+            # so both DML paths must keep match/evaluation/champion rows internally consistent.
+            "CREATE TRIGGER IF NOT EXISTS trg_matches_agents_same_run"
+            " BEFORE INSERT ON matches FOR EACH ROW"
+            " WHEN NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.agent_a_id)"
+            "           IS NEW.run_id)"
+            " OR NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.agent_b_id)"
+            "         IS NEW.run_id)"
+            " BEGIN"
+            "   SELECT RAISE(ABORT, 'match agents must belong to the stated run');"
+            " END",
+            "CREATE TRIGGER IF NOT EXISTS trg_matches_agents_same_run_update"
+            " BEFORE UPDATE ON matches FOR EACH ROW"
+            " WHEN NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.agent_a_id)"
+            "           IS NEW.run_id)"
+            " OR NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.agent_b_id)"
+            "         IS NEW.run_id)"
+            " BEGIN"
+            "   SELECT RAISE(ABORT, 'match agents must belong to the stated run');"
+            " END",
+            "CREATE TRIGGER IF NOT EXISTS trg_evaluations_agent_run"
+            " BEFORE INSERT ON evaluations FOR EACH ROW"
+            " WHEN NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.agent_id)"
+            "           IS NEW.run_id)"
+            " BEGIN"
+            "   SELECT RAISE(ABORT, 'evaluation agent must belong to the stated run');"
+            " END",
+            "CREATE TRIGGER IF NOT EXISTS trg_evaluations_agent_run_update"
+            " BEFORE UPDATE ON evaluations FOR EACH ROW"
+            " WHEN NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.agent_id)"
+            "           IS NEW.run_id)"
+            " BEGIN"
+            "   SELECT RAISE(ABORT, 'evaluation agent must belong to the stated run');"
+            " END",
+            "CREATE TRIGGER IF NOT EXISTS trg_champion_history_evidence_run_agent"
+            " BEFORE INSERT ON champion_history FOR EACH ROW"
+            " WHEN NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.agent_id)"
+            "           IS NEW.run_id)"
+            " OR (NEW.evaluation_id IS NOT NULL AND NOT ((SELECT agent_id FROM evaluations WHERE id = NEW.evaluation_id)"
+            "                                             IS NEW.agent_id))"
+            " OR (NEW.evaluation_id IS NOT NULL AND NOT ((SELECT run_id FROM evaluations WHERE id = NEW.evaluation_id)"
+            "                                             IS NEW.run_id))"
+            " OR (NEW.checkpoint_id IS NOT NULL AND NOT ((SELECT agent_id FROM checkpoints WHERE id = NEW.checkpoint_id)"
+            "                                             IS NEW.agent_id))"
+            " BEGIN"
+            "   SELECT RAISE(ABORT, 'champion evidence must belong to the same run and agent');"
+            " END",
+            "CREATE TRIGGER IF NOT EXISTS trg_champion_history_evidence_run_agent_update"
+            " BEFORE UPDATE ON champion_history FOR EACH ROW"
+            " WHEN NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.agent_id)"
+            "           IS NEW.run_id)"
+            " OR (NEW.evaluation_id IS NOT NULL AND NOT ((SELECT agent_id FROM evaluations WHERE id = NEW.evaluation_id)"
+            "                                             IS NEW.agent_id))"
+            " OR (NEW.evaluation_id IS NOT NULL AND NOT ((SELECT run_id FROM evaluations WHERE id = NEW.evaluation_id)"
+            "                                             IS NEW.run_id))"
+            " OR (NEW.checkpoint_id IS NOT NULL AND NOT ((SELECT agent_id FROM checkpoints WHERE id = NEW.checkpoint_id)"
+            "                                             IS NEW.agent_id))"
+            " BEGIN"
+            "   SELECT RAISE(ABORT, 'champion evidence must belong to the same run and agent');"
+            " END",
+            "CREATE TRIGGER IF NOT EXISTS trg_parentage_same_run"
+            " BEFORE INSERT ON parentage FOR EACH ROW"
+            " WHEN NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.child_agent_id)"
+            "           IS (SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.parent_agent_id))"
+            " BEGIN"
+            "   SELECT RAISE(ABORT, 'parent and child must belong to the same run');"
+            " END",
+            "CREATE TRIGGER IF NOT EXISTS trg_parentage_same_run_update"
+            " BEFORE UPDATE ON parentage FOR EACH ROW"
+            " WHEN NOT ((SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.child_agent_id)"
+            "           IS (SELECT g.run_id FROM agents a JOIN generations g ON g.id = a.generation_id WHERE a.id = NEW.parent_agent_id))"
+            " BEGIN"
+            "   SELECT RAISE(ABORT, 'parent and child must belong to the same run');"
+            " END",
+            "CREATE INDEX IF NOT EXISTS idx_generations_run ON generations(run_id)",
+            "CREATE INDEX IF NOT EXISTS idx_agents_generation ON agents(generation_id)",
+            "CREATE INDEX IF NOT EXISTS idx_parentage_child ON parentage(child_agent_id)",
+            "CREATE INDEX IF NOT EXISTS idx_checkpoints_agent ON checkpoints(agent_id)",
+            "CREATE INDEX IF NOT EXISTS idx_matches_run ON matches(run_id)",
+            "CREATE INDEX IF NOT EXISTS idx_evaluations_agent ON evaluations(agent_id)",
+            "CREATE INDEX IF NOT EXISTS idx_evaluations_run ON evaluations(run_id)",
+            "CREATE INDEX IF NOT EXISTS idx_champion_run ON champion_history(run_id)",
+        ),
+    ),
+]
