@@ -289,11 +289,11 @@ def test_identity_rewards_accumulate_per_agent_without_cross_contamination(store
     totalWins = 0
     totalLosses = 0
     for agent in service.agents:
-        # One transition is lost per round (first frame has no preceding state)
-        # and one per point boundary (the frame after a done envelope starts a
-        # fresh episode and must not bootstrap from the terminal state).
+        # The generation's first frame has no preceding state. Each point also
+        # discards the action selected on its terminal frame to prevent bootstrap.
         doneTransitions = sum(1 for transition in agent.dqn.replay_buffer.memory if transition.done)
-        transitions = agent.dqn.total_steps - rounds - doneTransitions
+        transitions = agent.dqn.total_steps - 1 - doneTransitions
+        assert transitions == len(agent.dqn.replay_buffer)
         expected = 0.01 * transitions + 5.0 * agent.wins - 5.0 * agent.losses
         assert agent.cumulativeReward == pytest.approx(expected, abs=1e-6)
         totalWins += agent.wins
