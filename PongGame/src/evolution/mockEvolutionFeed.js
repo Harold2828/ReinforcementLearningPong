@@ -61,7 +61,7 @@ export function createMockPopulation(seed) {
     return agents;
 }
 
-/** Pairs the 10 agents into exactly five arenas, each agent appearing once. */
+/** Pairs every agent into the configured arenas, each appearing once. */
 export function createMockArenaAssignments() {
     const assignments = [];
     for (let arenaIndex = 0; arenaIndex < ARENA_COUNT; arenaIndex += 1) {

@@ -50,15 +50,15 @@ describe("evolution data contract", () => {
         expect(result.errors.length).toBeGreaterThan(0);
     });
 
-    it("configures five arenas and ten agents", () => {
+    it("configures six arenas and twelve agents", () => {
         expect(ARENA_IDS).toHaveLength(ARENA_COUNT);
-        expect(ARENA_IDS).toEqual(["arena-0", "arena-1", "arena-2", "arena-3", "arena-4"]);
-        expect(AGENT_COUNT).toBe(10);
+        expect(ARENA_IDS).toEqual(["arena-0", "arena-1", "arena-2", "arena-3", "arena-4", "arena-5"]);
+        expect(AGENT_COUNT).toBe(12);
     });
 
-    it("lays out five courts in a 3-plus-2 grid within the viewport", () => {
+    it("lays out six courts in a 3-plus-3 grid within the viewport", () => {
         const arenas = layoutArenas(800, 600);
-        expect(arenas).toHaveLength(5);
+        expect(arenas).toHaveLength(6);
         expect(arenas[0].arenaId).toBe("arena-0");
         for (const arena of arenas) {
             expect(arena.x).toBeGreaterThanOrEqual(0);

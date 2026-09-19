@@ -26,11 +26,11 @@ $$C=\frac{\min(\text{combos},\;matches\cdot comboCap)}{matches\cdot comboCap}$$
 
 $$F=0.65W+0.25P+0.10C.$$
 
-With zero matches, all components and fitness are zero. The evaluator uses seeds `(101, 211, 307)` by default, plays each seed from both paddle sides against the fixed tracking opponent, stops at seven points or 2,000 steps, and counts capped matches. It disables agent training and exploration and asserts replay size, action steps, and optimization steps remain unchanged. Results are persisted with benchmark version and step-cap counts.
+With zero matches, all components and fitness are zero. The evaluator plays every unique population pairing in both paddle orientations: 66 pairings and 132 matches for twelve agents. Seeds are assigned reproducibly across tournament rounds, matches stop at seven points or 2,000 steps, and at most six run in lockstep. It disables training and exploration and asserts weights, replay size, action steps, and optimization steps remain unchanged. Aggregate fitness and every match are persisted.
 
 ## Genetic evolution
 
-Default population parameters are ten agents, four selected parents, two elites, eight offspring, and mutation probability 0.20. Ranking is deterministic for a recorded generation seed, including randomized tie breaks.
+Default population parameters are twelve agents, six selected parents, two elites, ten offspring, and mutation probability 0.20. Ranking is deterministic for a recorded generation seed, including randomized tie breaks.
 
 Architecture crossover splices the parent hidden-width sequences. Mutation can add a layer, remove a layer, or change a width while respecting architecture bounds.
 
@@ -50,9 +50,9 @@ stateDiagram-v2
     BuildPopulation --> Train
     Train --> Evaluate: all agents reach budget
     Evaluate --> Reproduce: not final generation
-    Reproduce --> BuildPopulation: 2 elites + 8 offspring
+    Reproduce --> BuildPopulation: 2 elites + 10 offspring
     Evaluate --> Complete: maximum generation
     Complete --> [*]
 ```
 
-Within one generation, pairings remain fixed and all five arenas persist. Between generations, pairing index and side orientation advance, the population is rebuilt from the generation plan, and courts/scores reset. A complete ten-agent round-robin requires nine generations.
+Within one generation, training pairings remain fixed and all six arenas persist. At the boundary, the separate round-robin evaluator completes before reproduction; the new population then resets all courts and scores.

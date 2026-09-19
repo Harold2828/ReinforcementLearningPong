@@ -18,10 +18,10 @@ def _generation_seed(configuration_seed: int, call_index: int) -> int:
 
 @dataclass(frozen=True)
 class GeneticConfiguration:
-    populationSize: int = 10
-    parentPoolSize: int = 4
+    populationSize: int = 12
+    parentPoolSize: int = 6
     elitismCount: int = 2
-    offspringCount: int = 8
+    offspringCount: int = 10
     mutationProbability: float = 0.20
     minHiddenLayers: int = 1
     maxHiddenLayers: int = 4

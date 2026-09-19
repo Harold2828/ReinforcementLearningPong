@@ -19,7 +19,7 @@ function renderDashboard() {
 }
 
 function populationEvent() {
-    const agents = Array.from({ length: 10 }, (_, index) => ({
+    const agents = Array.from({ length: 12 }, (_, index) => ({
         agentId: `agent-${index}`,
         generation: 0,
         role: index < 2 ? "elite" : "offspring",
@@ -35,9 +35,9 @@ describe("EvolutionDashboard", () => {
     it("renders the population table", () => {
         const dashboard = renderDashboard();
         dashboard.handleEvent(populationEvent());
-        expect(document.querySelector('[data-dash-role="population"]').children).toHaveLength(10);
+        expect(document.querySelector('[data-dash-role="population"]').children).toHaveLength(12);
         expect(document.querySelector('[data-dash-role="source"]').textContent).toContain("MOCK");
-        expect(document.querySelector('[data-dash-role="status"]').textContent).toContain("10 agents");
+        expect(document.querySelector('[data-dash-role="status"]').textContent).toContain("12 agents");
     });
 
     it("renders the LIVE genome architecture shape", () => {

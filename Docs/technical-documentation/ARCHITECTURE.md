@@ -48,9 +48,9 @@ Client controls:
 | `evolution_pause_run` / `evolution_resume_run` | Control work at scheduler boundaries. |
 | `evolution_stop_run` | Request a clean stop. |
 
-Server output uses `evolution_event`. Five snapshots are grouped into `match_snapshot_batch`; a queue of size two drops the oldest stale batch under backpressure. Population, metrics, evaluation, completion, and error events are emitted directly.
+Server output uses `evolution_event`. Six snapshots are grouped into `match_snapshot_batch`; a queue of size two drops the oldest stale batch under backpressure. Population, metrics, evaluation, completion, and error events are emitted directly.
 
-`LiveEvolutionFeed` validates contracts, expands batches, and labels live data. `SnapshotPlayback` interpolates positions between real snapshots according to sequence distance, 60 Hz physics, and playback speed. A new `matchId` resets interpolation. `EvolutionTrainingScene` renders the five courts in the Classic game area using the shared Pong renderer and assets.
+`LiveEvolutionFeed` validates contracts, expands batches, and labels live data. `SnapshotPlayback` interpolates positions between real snapshots according to sequence distance, 60 Hz physics, and playback speed. A new `matchId` resets interpolation. `EvolutionTrainingScene` renders six courts in the Classic game area using the shared Pong renderer and assets.
 
 ## Persistence
 

@@ -46,12 +46,12 @@ export function applySnapshot(board, envelope) {
     return { accepted: true, arena: arenaState, reason: null };
 }
 
-/** All 10 unique participant ids expected across the five arenas. */
+/** All unique participant ids expected across the configured arenas. */
 export function participantIds(board) {
     return Array.from(board.participants).sort();
 }
 
-export function hasTenUniqueParticipants(board) {
+export function hasExpectedParticipants(board) {
     return participantIds(board).length === AGENT_COUNT;
 }
 

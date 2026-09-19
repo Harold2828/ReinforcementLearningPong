@@ -86,14 +86,14 @@ describe("LiveEvolutionFeed", () => {
         expect(events[0].source).toBe(SOURCE_LABEL.LIVE);
     });
 
-    it("validates and fans out a five-arena snapshot batch", () => {
+    it("validates and fans out a six-arena snapshot batch", () => {
         const sensor = createSensor();
         const feed = new LiveEvolutionFeed({ sensor });
         const events = [];
         feed.subscribe((event) => events.push(event));
         feed.start();
         sensor.handlers.connection(true);
-        const snapshots = Array.from({ length: 5 }, (_, index) => ({
+        const snapshots = Array.from({ length: 6 }, (_, index) => ({
             ...validSnapshot(),
             arenaId: `arena-${index}`,
             matchId: `match-${index}`,
@@ -101,9 +101,9 @@ describe("LiveEvolutionFeed", () => {
 
         sensor.handlers.live({ type: "match_snapshot_batch", snapshots });
 
-        expect(events).toHaveLength(5);
+        expect(events).toHaveLength(6);
         expect(events.map((event) => event.arenaId)).toEqual([
-            "arena-0", "arena-1", "arena-2", "arena-3", "arena-4",
+            "arena-0", "arena-1", "arena-2", "arena-3", "arena-4", "arena-5",
         ]);
     });
 
@@ -166,7 +166,7 @@ describe("LiveEvolutionFeed", () => {
 
         expect(events).toHaveLength(1);
         expect(events[0]).toMatchObject({ type: "population", runId: "run-1" });
-        expect(events[0].agents).toHaveLength(10);
+        expect(events[0].agents).toHaveLength(12);
         expect(warn).toHaveBeenCalledTimes(1);
         warn.mockRestore();
     });

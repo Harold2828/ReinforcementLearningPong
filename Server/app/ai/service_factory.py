@@ -82,7 +82,9 @@ def create_evolution_training_service(serverRoot: Path):
     dbPath = Path(os.getenv("EVOLUTION_DB_PATH", str(dataDir / "evolution.db")))
     checkpointRoot = Path(os.getenv("EVOLUTION_CHECKPOINT_ROOT", str(dataDir / "checkpoints")))
     store = EvolutionStore(dbPath, checkpointRoot)
+    courtCount = int(os.getenv("EVOLUTION_COURT_COUNT", "6"))
     configuration = EvolutionTrainingConfiguration(
+        courtCount=courtCount,
         stepsPerAgentPerGeneration=int(os.getenv("EVOLUTION_STEPS_PER_AGENT", "100000")),
         roundTicks=int(os.getenv("EVOLUTION_ROUND_TICKS", "1000")),
         maxGenerations=int(os.getenv("EVOLUTION_MAX_GENERATIONS", "1")),
@@ -91,7 +93,13 @@ def create_evolution_training_service(serverRoot: Path):
         winScore=int(os.getenv("EVOLUTION_WIN_SCORE", "7")),
         device=os.getenv("EVOLUTION_DEVICE", "cpu").strip().lower(),
     )
-    geneticConfiguration = GeneticConfiguration(seed=int(os.getenv("EVOLUTION_SEED", "42")))
+    geneticConfiguration = GeneticConfiguration(
+        populationSize=int(os.getenv("EVOLUTION_POPULATION_SIZE", "12")),
+        parentPoolSize=int(os.getenv("EVOLUTION_PARENT_COUNT", "6")),
+        elitismCount=int(os.getenv("EVOLUTION_ELITE_COUNT", "2")),
+        offspringCount=int(os.getenv("EVOLUTION_OFFSPRING_COUNT", "10")),
+        seed=int(os.getenv("EVOLUTION_SEED", "42")),
+    )
     dqnConfiguration = DQNConfiguration(
         replayCapacity=int(os.getenv("EVOLUTION_REPLAY_CAPACITY", "100000")),
         replayWarmup=int(os.getenv("EVOLUTION_REPLAY_WARMUP", "5000")),
@@ -106,8 +114,11 @@ def create_evolution_training_service(serverRoot: Path):
         ),
         maxStepsPerMatch=int(os.getenv("EVOLUTION_EVALUATION_MAX_STEPS", "2000")),
         winScore=int(os.getenv("EVOLUTION_EVALUATION_WIN_SCORE", "7")),
+        maxConcurrentMatches=int(
+            os.getenv("EVOLUTION_EVALUATION_CONCURRENCY", str(courtCount))
+        ),
         benchmarkVersion=os.getenv(
-            "EVOLUTION_BENCHMARK", "spec-07-fixed-tracker-v1"
+            "EVOLUTION_BENCHMARK", "spec-07-round-robin-v1"
         ),
     )
     fitnessConfiguration = FitnessConfiguration(
@@ -122,7 +133,7 @@ def create_evolution_training_service(serverRoot: Path):
         geneticConfiguration=geneticConfiguration,
         dqnConfiguration=dqnConfiguration,
         codeRevision=os.getenv("EVOLUTION_CODE_REVISION", ""),
-        benchmarkDefinition=os.getenv("EVOLUTION_BENCHMARK", "spec-07-fixed-tracker-v1"),
+        benchmarkDefinition=os.getenv("EVOLUTION_BENCHMARK", "spec-07-round-robin-v1"),
         evaluationConfiguration=evaluationConfiguration,
         fitnessConfiguration=fitnessConfiguration,
     )

@@ -9,9 +9,6 @@ from typing import Any
 from flask_socketio import emit
 
 from .ai.multi_agent_training_service import HUMAN_VS_AI, validate_multi_agent_state
-from .evolution.simulation import ARENA_IDS
-
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -93,7 +90,7 @@ def register_evolution_sockets(socketio, evolutionTrainingService) -> None:
             socketio.emit("evolution_event", event)
             return
         snapshotBatch.append(event)
-        if len(snapshotBatch) == len(ARENA_IDS):
+        if len(snapshotBatch) == len(evolutionTrainingService.arenaIds):
             enqueue_latest(
                 {"type": "match_snapshot_batch", "snapshots": list(snapshotBatch)}
             )

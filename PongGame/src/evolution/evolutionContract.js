@@ -1,7 +1,6 @@
 /**
  * SPEC-03 frontend data contract.
- * Backend authoritative simulation is NOT yet wired (SPEC-05/06); the mock
- * feed, evolution scenes, and dashboard are built against this contract.
+ * The mock and LIVE feeds, scenes, and dashboard share this contract.
  */
 
 export const EVOLUTION_VIEWS = Object.freeze({
@@ -11,9 +10,18 @@ export const EVOLUTION_VIEWS = Object.freeze({
     HUMAN_VS_CHAMPION: "human-vs-champion",
 });
 
-export const ARENA_COUNT = 5;
-export const AGENT_COUNT = 10;
 export const AGENTS_PER_ARENA = 2;
+
+function configuredCount(name, fallback) {
+    const value = Number.parseInt(import.meta.env?.[name] ?? "", 10);
+    return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+export const ARENA_COUNT = configuredCount("VITE_EVOLUTION_COURT_COUNT", 6);
+export const AGENT_COUNT = configuredCount("VITE_EVOLUTION_POPULATION_SIZE", 12);
+if (AGENT_COUNT !== ARENA_COUNT * AGENTS_PER_ARENA) {
+    throw new Error("Evolution population must provide exactly two agents per court");
+}
 
 export const EVOLUTION_EVENT_TYPES = Object.freeze({
     MATCH_SNAPSHOT: "match_snapshot",
@@ -24,7 +32,7 @@ export const EVOLUTION_EVENT_TYPES = Object.freeze({
     CONTROLLED_ERROR: "controlled_error",
 });
 
-export const ARENA_IDS = Object.freeze(["arena-0", "arena-1", "arena-2", "arena-3", "arena-4"]);
+export const ARENA_IDS = Object.freeze(Array.from({ length: ARENA_COUNT }, (_, index) => `arena-${index}`));
 
 export const MATCH_STATUS = Object.freeze({
     RUNNING: "running",

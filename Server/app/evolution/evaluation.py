@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 import math
 from typing import Sequence
 
+import torch
+
 from ..ai.dqn_agent import DQNAgent, pong_state_to_vector
 from .simulation import MatchAssignment, MatchConfig, MatchParticipant, MatchSession, TERMINAL
-from .training_orchestrator import pong_state_from_envelope
+from .training_orchestrator import pong_state_from_envelope, round_robin_pairs
 
 
 @dataclass(frozen=True)
@@ -31,13 +34,16 @@ class EvaluationConfiguration:
     seeds: tuple[int, ...] = (101, 211, 307)
     maxStepsPerMatch: int = 2_000
     winScore: int = 7
-    benchmarkVersion: str = "spec-07-fixed-tracker-v1"
+    maxConcurrentMatches: int = 6
+    benchmarkVersion: str = "spec-07-round-robin-v1"
 
     def validate(self) -> None:
         if not self.seeds:
             raise ValueError("evaluation requires at least one seed")
         if self.maxStepsPerMatch <= 0 or self.winScore <= 0:
             raise ValueError("evaluation step and score budgets must be positive")
+        if self.maxConcurrentMatches <= 0:
+            raise ValueError("evaluation concurrency must be positive")
 
 
 def calculate_fitness(
@@ -71,8 +77,8 @@ def calculate_fitness(
     return {**metrics, "fitness": _bound(fitness)}
 
 
-class FixedOpponentEvaluator:
-    """Deterministic, inference-only benchmark with equal seeds and both sides."""
+class RoundRobinEvaluator:
+    """Deterministic, inference-only tournament with both paddle sides."""
 
     def __init__(
         self,
@@ -102,106 +108,177 @@ class FixedOpponentEvaluator:
             maxTotalSteps=self.configuration.maxStepsPerMatch,
             winScore=self.configuration.winScore,
         )
-
-    @property
-    def sampleCount(self) -> int:
-        return len(self.configuration.seeds) * 2
+        self.matchResults: list[dict] = []
+        self.maxConcurrentObserved = 0
 
     def evaluate(self, agents: Sequence[DQNAgent], generationIndex: int = 0) -> list[dict]:
-        return [self._evaluate_agent(agent, index, generationIndex) for index, agent in enumerate(agents)]
-
-    def _evaluate_agent(self, agent: DQNAgent, index: int, generationIndex: int) -> dict:
-        counters = {
-            "wins": 0,
-            "draws": 0,
-            "losses": 0,
-            "pointsFor": 0,
-            "pointsAgainst": 0,
-            "comboTotal": 0.0,
-            "stepCapTerminations": 0,
-        }
-        trainingWasEnabled = agent.trainingEnabled
-        replaySize = len(agent.replay_buffer)
-        totalSteps = agent.total_steps
-        trainingSteps = agent.training_steps
-        agent.stop_training()
+        if len(agents) < 2 or len(agents) % 2:
+            raise ValueError("round-robin evaluation requires an even population of at least two")
+        counters = [_empty_counters() for _ in agents]
+        trainingStates = [agent.trainingEnabled for agent in agents]
+        trainingCounters = [
+            (len(agent.replay_buffer), agent.total_steps, agent.training_steps)
+            for agent in agents
+        ]
+        networkStates = [_network_state(agent) for agent in agents]
+        self.matchResults = []
+        self.maxConcurrentObserved = 0
+        for agent in agents:
+            agent.stop_training()
         try:
-            for seed in self.configuration.seeds:
+            for roundIndex in range(len(agents) - 1):
+                pairs = [(a, b) for a, b, _ in round_robin_pairs(len(agents), roundIndex)]
+                seed = self.configuration.seeds[roundIndex % len(self.configuration.seeds)]
                 for reversedSides in (False, True):
-                    self._play_match(agent, index, generationIndex, seed, reversedSides, counters)
+                    for start in range(0, len(pairs), self.configuration.maxConcurrentMatches):
+                        batch = pairs[start:start + self.configuration.maxConcurrentMatches]
+                        self.maxConcurrentObserved = max(self.maxConcurrentObserved, len(batch))
+                        self._play_batch(
+                            agents, batch, generationIndex, roundIndex, seed, reversedSides, counters
+                        )
         finally:
-            if trainingWasEnabled:
-                agent.start_training()
-        if (len(agent.replay_buffer), agent.total_steps, agent.training_steps) != (
-            replaySize,
-            totalSteps,
-            trainingSteps,
-        ):
-            raise RuntimeError("evaluation mutated agent training state")
-        metrics = calculate_fitness(
-            counters["wins"],
-            counters["draws"],
-            counters["losses"],
-            counters["pointsFor"],
-            counters["pointsAgainst"],
-            counters["comboTotal"],
-            self.fitnessConfiguration,
-        )
-        return {
-            **counters,
-            **metrics,
-            "sampleCount": self.sampleCount,
-            "trainingStateUnchanged": True,
-        }
+            for agent, enabled in zip(agents, trainingStates):
+                if enabled:
+                    agent.start_training()
+        for index, agent in enumerate(agents):
+            current = (len(agent.replay_buffer), agent.total_steps, agent.training_steps)
+            if current != trainingCounters[index] or not _same_network_state(agent, networkStates[index]):
+                raise RuntimeError("evaluation mutated agent training state or model weights")
+        results = []
+        for item in counters:
+            metrics = calculate_fitness(
+                item["wins"], item["draws"], item["losses"],
+                item["pointsFor"], item["pointsAgainst"], item["comboTotal"],
+                self.fitnessConfiguration,
+            )
+            results.append({
+                **item,
+                **metrics,
+                "sampleCount": item["wins"] + item["draws"] + item["losses"],
+                "trainingStateUnchanged": True,
+                "weightsUnchanged": True,
+            })
+        return results
 
-    def _play_match(self, agent, index, generationIndex, seed, reversedSides, counters) -> None:
-        assignment = MatchAssignment(
-            arenaId="evaluation",
-            runId="evaluation",
-            generationId=f"generation-{generationIndex}",
-            agentA=MatchParticipant(f"agent-{index}", generationIndex, 0.0),
-            agentB=MatchParticipant("fixed-tracker", generationIndex, 0.0),
-            reversedSides=reversedSides,
-            seed=seed,
-        )
-        session = MatchSession(assignment, self.matchConfig)
-        envelope = session.snapshot()
-        bestCombo = 0
+    def _play_batch(
+        self, agents, pairs, generationIndex, roundIndex, seed, reversedSides, counters
+    ) -> None:
+        sessions = []
+        envelopes = []
+        combos = []
+        for batchIndex, (aIndex, bIndex) in enumerate(pairs):
+            assignment = MatchAssignment(
+                arenaId=f"evaluation-{batchIndex}",
+                runId="evaluation",
+                generationId=f"generation-{generationIndex}",
+                agentA=MatchParticipant(f"agent-{aIndex}", generationIndex, 0.0),
+                agentB=MatchParticipant(f"agent-{bIndex}", generationIndex, 0.0),
+                reversedSides=reversedSides,
+                seed=seed,
+                matchKey=f"round-{roundIndex}-side-{int(reversedSides)}",
+            )
+            session = MatchSession(assignment, self.matchConfig)
+            sessions.append((session, aIndex, bIndex))
+            envelopes.append(session.snapshot())
+            combos.append([0, 0])
+
         for _ in range(self.configuration.maxStepsPerMatch):
-            stateA = pong_state_to_vector(pong_state_from_envelope(envelope, "A", self.matchConfig))
-            actionA = DQNAgent.action_name(agent.select_action(stateA, explore=False))
-            actionB = _tracking_action(envelope, "agentB")
-            envelope = session.step(actionA, actionB)
-            if envelope["pointWinner"] == "agent":
-                bestCombo = max(bestCombo, envelope["agentA"]["returns"])
-            if envelope["status"] == TERMINAL:
+            active = False
+            for index, (session, aIndex, bIndex) in enumerate(sessions):
+                envelope = envelopes[index]
+                if envelope["status"] == TERMINAL:
+                    continue
+                active = True
+                stateA = pong_state_to_vector(
+                    pong_state_from_envelope(envelope, "A", self.matchConfig)
+                )
+                stateB = pong_state_to_vector(
+                    pong_state_from_envelope(envelope, "B", self.matchConfig)
+                )
+                actionA = DQNAgent.action_name(agents[aIndex].select_action(stateA, explore=False))
+                actionB = DQNAgent.action_name(agents[bIndex].select_action(stateB, explore=False))
+                envelope = session.step(actionA, actionB)
+                envelopes[index] = envelope
+                if envelope["pointWinner"] == "agent":
+                    combos[index][0] = max(combos[index][0], envelope["agentA"]["returns"])
+                elif envelope["pointWinner"] == "opponent":
+                    combos[index][1] = max(combos[index][1], envelope["agentB"]["returns"])
+            if not active:
                 break
-        scoreA, scoreB = envelope["agentA"]["score"], envelope["agentB"]["score"]
-        counters["pointsFor"] += scoreA
-        counters["pointsAgainst"] += scoreB
-        counters["comboTotal"] += min(bestCombo, self.fitnessConfiguration.comboCap)
-        if scoreA > scoreB:
-            counters["wins"] += 1
-        elif scoreA < scoreB:
-            counters["losses"] += 1
-        else:
-            counters["draws"] += 1
-        if (
-            envelope["status"] != TERMINAL
-            or (max(scoreA, scoreB) < self.configuration.winScore and envelope["step"] >= self.configuration.maxStepsPerMatch)
+
+        for (_, aIndex, bIndex), envelope, bestCombos in zip(sessions, envelopes, combos):
+            self._record_match(
+                envelope, aIndex, bIndex, generationIndex, roundIndex,
+                seed, reversedSides, bestCombos, counters,
+            )
+
+    def _record_match(
+        self, envelope, aIndex, bIndex, generationIndex, roundIndex,
+        seed, reversedSides, bestCombos, counters,
+    ) -> None:
+        scoreA = envelope["agentA"]["score"]
+        scoreB = envelope["agentB"]["score"]
+        stepCap = envelope["status"] != TERMINAL or max(scoreA, scoreB) < self.configuration.winScore
+        for own, ownScore, otherScore, combo in (
+            (aIndex, scoreA, scoreB, bestCombos[0]),
+            (bIndex, scoreB, scoreA, bestCombos[1]),
         ):
-            counters["stepCapTerminations"] += 1
+            item = counters[own]
+            item["pointsFor"] += ownScore
+            item["pointsAgainst"] += otherScore
+            item["comboTotal"] += min(combo, self.fitnessConfiguration.comboCap)
+            if ownScore > otherScore:
+                item["wins"] += 1
+            elif ownScore < otherScore:
+                item["losses"] += 1
+            else:
+                item["draws"] += 1
+            if stepCap:
+                item["stepCapTerminations"] += 1
+        self.matchResults.append({
+            "generation": generationIndex,
+            "round": roundIndex,
+            "agentAIndex": aIndex,
+            "agentBIndex": bIndex,
+            "reversedSides": reversedSides,
+            "seed": seed,
+            "scoreA": scoreA,
+            "scoreB": scoreB,
+            "bestComboA": min(bestCombos[0], self.fitnessConfiguration.comboCap),
+            "bestComboB": min(bestCombos[1], self.fitnessConfiguration.comboCap),
+            "steps": envelope["step"],
+            "status": envelope["status"],
+            "stepCapTermination": stepCap,
+        })
 
 
-def _tracking_action(envelope: dict, participant: str) -> str:
-    paddle = envelope[participant]["paddleY"]
-    ball = envelope["ball"]["y"]
-    tolerance = 0.02
-    if ball < paddle - tolerance:
-        return "UP"
-    if ball > paddle + tolerance:
-        return "DOWN"
-    return "STAY"
+def _empty_counters() -> dict:
+    return {
+        "wins": 0,
+        "draws": 0,
+        "losses": 0,
+        "pointsFor": 0,
+        "pointsAgainst": 0,
+        "comboTotal": 0.0,
+        "stepCapTerminations": 0,
+    }
+
+
+def _network_state(agent: DQNAgent) -> tuple[dict, dict]:
+    return (
+        copy.deepcopy(agent.policy_net.state_dict()),
+        copy.deepcopy(agent.target_net.state_dict()),
+    )
+
+
+def _same_network_state(agent: DQNAgent, before: tuple[dict, dict]) -> bool:
+    return all(
+        torch.equal(current[key], saved[key])
+        for current, saved in zip(
+            (agent.policy_net.state_dict(), agent.target_net.state_dict()), before
+        )
+        for key in saved
+    )
 
 
 def _bound(value: float) -> float:

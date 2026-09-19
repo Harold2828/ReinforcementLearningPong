@@ -18,8 +18,8 @@ def assignment(arena_id="arena-0", seed=11, reversed_sides=False, match_key=""):
     )
 
 
-def five_assignments(seed=11):
-    return [assignment(f"arena-{index}", seed=seed + index * 97) for index in range(5)]
+def six_assignments(seed=11):
+    return [assignment(f"arena-{index}", seed=seed + index * 97) for index in range(6)]
 
 
 def signature(envelopes):
@@ -48,18 +48,18 @@ def test_match_key_makes_round_snapshot_ids_unique():
 
 
 def test_deterministic_trajectories_for_equal_seeds_and_actions():
-    actions = {f"arena-{index}": ("UP", "DOWN") for index in range(5)}
-    first = SimulationEngine(five_assignments(), MatchConfig(maxTotalSteps=200))
-    second = SimulationEngine(five_assignments(), MatchConfig(maxTotalSteps=200))
+    actions = {f"arena-{index}": ("UP", "DOWN") for index in range(6)}
+    first = SimulationEngine(six_assignments(), MatchConfig(maxTotalSteps=200))
+    second = SimulationEngine(six_assignments(), MatchConfig(maxTotalSteps=200))
 
     for _ in range(120):
         assert signature(first.step(actions)) == signature(second.step(actions))
 
 
 def test_matches_are_isolated_under_divergent_actions():
-    actions = {f"arena-{index}": ("UP", "DOWN") for index in range(5)}
-    base = SimulationEngine(five_assignments(), MatchConfig(maxTotalSteps=200))
-    altered = SimulationEngine(five_assignments(), MatchConfig(maxTotalSteps=200))
+    actions = {f"arena-{index}": ("UP", "DOWN") for index in range(6)}
+    base = SimulationEngine(six_assignments(), MatchConfig(maxTotalSteps=200))
+    altered = SimulationEngine(six_assignments(), MatchConfig(maxTotalSteps=200))
 
     for _ in range(100):
         base.step(actions)
@@ -67,7 +67,7 @@ def test_matches_are_isolated_under_divergent_actions():
         altered_actions["arena-0"] = ("STAY", "STAY")
         altered.step(altered_actions)
 
-    for arena_id in ["arena-1", "arena-2", "arena-3", "arena-4"]:
+    for arena_id in ["arena-1", "arena-2", "arena-3", "arena-4", "arena-5"]:
         assert signature([base.byArena[arena_id].snapshot()]) == signature(
             [altered.byArena[arena_id].snapshot()]
         )

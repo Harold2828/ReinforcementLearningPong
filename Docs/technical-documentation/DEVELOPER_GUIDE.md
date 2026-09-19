@@ -28,6 +28,10 @@ Docker Compose loads `.env.example` and overrides evolution settings in `docker-
 
 | Variable | Docker value | Meaning |
 |---|---:|---|
+| `EVOLUTION_POPULATION_SIZE` | 12 | Independent DQN agents. |
+| `EVOLUTION_COURT_COUNT` | 6 | Simultaneous isolated training arenas. |
+| `EVOLUTION_PARENT_COUNT` | 6 | Selected parent pool. |
+| `EVOLUTION_ELITE_COUNT` / `OFFSPRING_COUNT` | 2 / 10 | Next-generation composition. |
 | `EVOLUTION_STEPS_PER_AGENT` | 100000 | Per-generation training action budget. |
 | `EVOLUTION_ROUND_TICKS` | 150 | Scheduler chunk; does not reset a match. |
 | `EVOLUTION_SNAPSHOT_INTERVAL` | 10 | Physics steps between emitted snapshot batches. |
@@ -38,6 +42,7 @@ Docker Compose loads `.env.example` and overrides evolution settings in `docker-
 | `EVOLUTION_EVALUATION_SEEDS` | 101,211,307 | Comparable evaluation seeds. |
 | `EVOLUTION_EVALUATION_MAX_STEPS` | 2000 | Evaluation match cap. |
 | `EVOLUTION_EVALUATION_WIN_SCORE` | 7 | Evaluation-only score termination. |
+| `EVOLUTION_EVALUATION_CONCURRENCY` | 6 | Maximum tournament matches in one batch. |
 
 ## Docker and Makefile
 
@@ -89,11 +94,11 @@ Key tests are in:
 - `PongGame/src/test/snapshotPlayback.test.js`
 - `PongGame/src/test/evolutionContract.test.js`
 
-For browser validation, confirm five courts, ten paddles, five moving balls, accumulated scores, LIVE metrics, and continued motion across multiple scheduler chunks. Also return to Classic 1v1 to check that its scene remains unaffected.
+For browser validation, confirm six courts, twelve paddles, six moving balls, accumulated scores, LIVE metrics, and continued motion across multiple scheduler chunks. Also return to Classic 1v1 to check that its scene remains unaffected.
 
 ## Known limitations
 
-- Fixed pairings rotate once per generation, so full round-robin coverage takes nine generations.
+- Training pairings stay fixed per generation; evaluation runs a separate full round robin.
 - Replay buffers and optimizer state are not inherited into offspring or elites; elites preserve trained network weights only.
 - Snapshot backpressure intentionally drops stale batches.
 - Pause/stop responsiveness is bounded by `roundTicks`.
@@ -101,4 +106,3 @@ For browser validation, confirm five courts, ten paddles, five moving balls, acc
 - No champion promotion workflow (SPEC-08) exists.
 - No automated hyperparameter/performance optimizer (SPEC-10) exists.
 - The frontend bundle triggers Vite's large-chunk warning.
-- `Docs/` is ignored by Git; tracking documentation requires explicit owner authorization to change ignore behavior.

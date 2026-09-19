@@ -31,13 +31,13 @@ from ..persistence.store import EvolutionStore
 from .genetic import GeneticAlgorithm, GeneticConfiguration, GenerationPlan, lineage_records
 from .genome import Genome
 from .simulation import (
-    ARENA_IDS,
     TERMINAL,
     VELOCITY_SCALE,
     MatchAssignment,
     MatchConfig,
     MatchParticipant,
     SimulationEngine,
+    arena_ids,
 )
 
 AGENT_ROLE_INITIAL = "initial"
@@ -63,8 +63,7 @@ def round_robin_pairs(populationSize: int, roundIndex: int) -> list[tuple[int, i
 
     Returns (agentIndex, opponentIndex, reversedSides). Every index is paired
     exactly once per round, and over a full cycle of (populationSize - 1)
-    rounds every agent meets every other agent exactly once with both sides
-    exercised.
+    rounds every agent meets every other agent exactly once.
     """
     if populationSize < 2:
         raise ValueError("round-robin needs a population of at least two")
@@ -149,6 +148,7 @@ def pong_state_from_envelope(envelope: dict, side: str, config: MatchConfig) -> 
 
 @dataclass(frozen=True)
 class EvolutionTrainingConfiguration:
+    courtCount: int = 6
     stepsPerAgentPerGeneration: int = 100_000
     roundTicks: int = 1_000
     maxGenerations: int = 1
@@ -159,6 +159,8 @@ class EvolutionTrainingConfiguration:
     device: str = "cpu"
 
     def validate(self) -> None:
+        if self.courtCount <= 0:
+            raise ValueError("courtCount must be greater than zero")
         if self.stepsPerAgentPerGeneration <= 0:
             raise ValueError("stepsPerAgentPerGeneration must be greater than zero")
         if self.roundTicks <= 0:
@@ -261,6 +263,8 @@ class EvolutionTrainingService:
         self.configuration.validate()
         self.geneticConfiguration = geneticConfiguration or GeneticConfiguration()
         self.geneticConfiguration.validate()
+        if self.geneticConfiguration.populationSize != 2 * self.configuration.courtCount:
+            raise ValueError("populationSize must equal two agents per configured court")
         self.dqnConfiguration = dqnConfiguration or DQNConfiguration()
         self.dqnConfiguration.validate()
         self.matchConfig = MatchConfig(
@@ -274,13 +278,14 @@ class EvolutionTrainingService:
         self.fitnessConfiguration = fitnessConfiguration or FitnessConfiguration()
         self.controller = RunController()
         self.geneticAlgorithm = GeneticAlgorithm(self.geneticConfiguration)
+        self.arenaIds = arena_ids(self.configuration.courtCount)
         provided = list(genomes) if genomes is not None else None
         self.genomes: tuple[Genome, ...] = (
             tuple(provided)
             if provided is not None
             else self.geneticAlgorithm.initial_population()
         )
-        targetPopulation = 2 * len(ARENA_IDS)
+        targetPopulation = 2 * len(self.arenaIds)
         if len(self.genomes) != targetPopulation:
             raise ValueError(
                 f"evolution population must be {targetPopulation} (2 per SPEC-05 arena), "
@@ -382,12 +387,12 @@ class EvolutionTrainingService:
         fitnessConfiguration=None,
     ) -> dict:
         """Train, evaluate, and reproduce a complete configurable run."""
-        from .evaluation import EvaluationConfiguration, FitnessConfiguration, FixedOpponentEvaluator
+        from .evaluation import EvaluationConfiguration, FitnessConfiguration, RoundRobinEvaluator
 
         self.controller.reset()
         evaluationConfiguration = evaluationConfiguration or self.evaluationConfiguration
         fitnessConfiguration = fitnessConfiguration or self.fitnessConfiguration
-        evaluator = FixedOpponentEvaluator(evaluationConfiguration, fitnessConfiguration, self.matchConfig)
+        evaluator = RoundRobinEvaluator(evaluationConfiguration, fitnessConfiguration, self.matchConfig)
         self.runUuid = runUuid
         self.runId = self.store.create_run(
             runUuid,
@@ -435,6 +440,34 @@ class EvolutionTrainingService:
                 evaluation = evaluator.evaluate(
                     [agent.dqn for agent in self.agents], generationIndex
                 )
+                for matchIndex, match in enumerate(evaluator.matchResults):
+                    aIndex = match["agentAIndex"]
+                    bIndex = match["agentBIndex"]
+                    winner = None
+                    if match["scoreA"] > match["scoreB"]:
+                        winner = "agent"
+                    elif match["scoreB"] > match["scoreA"]:
+                        winner = "opponent"
+                    self.store.record_match(
+                        match_uuid=(
+                            f"evaluation-{self.runUuid}-gen-{generationIndex}-"
+                            f"round-{match['round']}-pair-{aIndex}-{bIndex}-"
+                            f"side-{int(match['reversedSides'])}"
+                        ),
+                        run_id=self.runId,
+                        arena=f"evaluation-{matchIndex % self.configuration.courtCount}",
+                        agent_a_id=self.agents[aIndex].storeId,
+                        agent_b_id=self.agents[bIndex].storeId,
+                        opponent_type="population",
+                        game_seed=match["seed"],
+                        mode="evaluation_round_robin",
+                        score_a=match["scoreA"],
+                        score_b=match["scoreB"],
+                        combos_a=match["bestComboA"],
+                        combos_b=match["bestComboB"],
+                        duration_steps=match["steps"],
+                        result={**match, "winner": winner},
+                    )
                 for agent, result in zip(self.agents, evaluation):
                     self.store.record_evaluation(
                         agent.storeId,
@@ -470,6 +503,8 @@ class EvolutionTrainingService:
                             [elite.parentIndex for elite in nextPlan.elites] if nextPlan is not None else []
                         ),
                         "offspringCount": len(nextPlan.offspring) if nextPlan is not None else 0,
+                        "evaluationMatchCount": len(evaluator.matchResults),
+                        "evaluationMaxConcurrency": evaluator.maxConcurrentObserved,
                         "eliteInheritanceVerified": self._eliteInheritanceVerified,
                     }
                 )
@@ -694,7 +729,7 @@ class EvolutionTrainingService:
             agentB = self.agents[bIndex]
             assignments.append(
                 MatchAssignment(
-                    arenaId=ARENA_IDS[arenaIndex],
+                    arenaId=self.arenaIds[arenaIndex],
                     runId=f"run-{self.runId}",
                     generationId=f"generation-{self.generationId}",
                     agentA=MatchParticipant(
@@ -717,7 +752,7 @@ class EvolutionTrainingService:
         self._engine = SimulationEngine(assignments, self.matchConfig)
         self._generationPairs = pairs
         self._generationMatchSeeds = matchSeeds
-        self._pendingActions = {arenaId: ("STAY", "STAY") for arenaId in ARENA_IDS}
+        self._pendingActions = {arenaId: ("STAY", "STAY") for arenaId in self.arenaIds}
         self._generationStartedAt = time.monotonic()
         self._sideLastReturns = {}
         self._lastSequences = {}

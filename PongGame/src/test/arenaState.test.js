@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySnapshot, createArenaBoard, hasTenUniqueParticipants, participantIds } from "../evolution/arenaState";
+import { applySnapshot, createArenaBoard, hasExpectedParticipants, participantIds } from "../evolution/arenaState";
 import { EVOLUTION_EVENT_TYPES, MATCH_STATUS } from "../evolution/evolutionContract";
 
 function snapshot(arenaId, matchId, sequence, agentA = "agent-0", agentB = "agent-1") {
@@ -52,14 +52,15 @@ describe("arena board", () => {
         expect(applySnapshot(board, { ...snapshot("arena-0", "m1", 1), type: "population" }).reason).toBe("not_a_snapshot");
     });
 
-    it("tracks ten unique participants across five arenas", () => {
+    it("tracks twelve unique participants across six arenas", () => {
         const board = createArenaBoard();
         applySnapshot(board, snapshot("arena-0", "m1", 1, "agent-0", "agent-1"));
         applySnapshot(board, snapshot("arena-1", "m1", 1, "agent-2", "agent-3"));
         applySnapshot(board, snapshot("arena-2", "m1", 1, "agent-4", "agent-5"));
         applySnapshot(board, snapshot("arena-3", "m1", 1, "agent-6", "agent-7"));
         applySnapshot(board, snapshot("arena-4", "m1", 1, "agent-8", "agent-9"));
-        expect(participantIds(board)).toHaveLength(10);
-        expect(hasTenUniqueParticipants(board)).toBe(true);
+        applySnapshot(board, snapshot("arena-5", "m1", 1, "agent-10", "agent-11"));
+        expect(participantIds(board)).toHaveLength(12);
+        expect(hasExpectedParticipants(board)).toBe(true);
     });
 });

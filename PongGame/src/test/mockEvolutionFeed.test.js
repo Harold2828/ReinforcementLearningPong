@@ -8,7 +8,7 @@ import {
 import { AGENT_COUNT, AGENTS_PER_ARENA, ARENA_COUNT, SOURCE_LABEL, validateMatchSnapshot } from "../evolution/evolutionContract";
 
 describe("mock evolution feed generators", () => {
-    it("maps ten unique agents onto five arenas with two per arena", () => {
+    it("maps twelve unique agents onto six arenas with two per arena", () => {
         const assignments = createMockArenaAssignments();
         expect(assignments).toHaveLength(ARENA_COUNT);
         const participantIds = assignments.flatMap((entry) => [entry.agentAId, entry.agentBId]);
@@ -19,7 +19,7 @@ describe("mock evolution feed generators", () => {
         }
     });
 
-    it("creates a deterministic ten-member population", () => {
+    it("creates a deterministic twelve-member population", () => {
         const first = createMockPopulation(42);
         const second = createMockPopulation(42);
         expect(first).toHaveLength(AGENT_COUNT);
@@ -75,7 +75,7 @@ describe("MockEvolutionFeed", () => {
             expect(validateMatchSnapshot(snapshot).ok).toBe(true);
             expect(snapshot.source).toBe(SOURCE_LABEL.MOCK);
         }
-        for (const arenaId of ["arena-0", "arena-1", "arena-2", "arena-3", "arena-4"]) {
+        for (const arenaId of ["arena-0", "arena-1", "arena-2", "arena-3", "arena-4", "arena-5"]) {
             const sequences = snapshots.filter((event) => event.arenaId === arenaId).map((event) => event.sequence);
             expect(sequences[0]).toBe(1);
             expect(sequences[1]).toBeGreaterThan(sequences[0]);

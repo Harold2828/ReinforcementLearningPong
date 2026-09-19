@@ -7,7 +7,7 @@ from app.ai.dqn_agent import DQNAgent, DQNConfiguration
 from app.evolution.evaluation import (
     EvaluationConfiguration,
     FitnessConfiguration,
-    FixedOpponentEvaluator,
+    RoundRobinEvaluator,
     calculate_fitness,
 )
 from app.evolution.genetic import (
@@ -43,21 +43,44 @@ def test_fitness_is_bounded_and_handles_draws_zero_matches_and_combo_cap():
 
 
 def test_evaluation_is_inference_only_and_reverses_sides():
-    agent = DQNAgent(
-        configuration=DQNConfiguration(replayCapacity=8, replayWarmup=8, batchSize=2),
-        hiddenWidths=(32,),
-        device="cpu",
+    agents = [
+        DQNAgent(
+            configuration=DQNConfiguration(replayCapacity=8, replayWarmup=8, batchSize=2),
+            hiddenWidths=(32,),
+            device="cpu",
+        )
+        for _ in range(12)
+    ]
+    evaluator = RoundRobinEvaluator(
+        EvaluationConfiguration(
+            seeds=(3,), maxStepsPerMatch=2, winScore=1, maxConcurrentMatches=6
+        )
     )
-    evaluator = FixedOpponentEvaluator(
-        EvaluationConfiguration(seeds=(3,), maxStepsPerMatch=4, winScore=1)
-    )
-    before = (agent.total_steps, agent.training_steps, len(agent.replay_buffer))
-    result = evaluator.evaluate([agent])[0]
+    before = [
+        (agent.total_steps, agent.training_steps, len(agent.replay_buffer))
+        for agent in agents
+    ]
+    results = evaluator.evaluate(agents)
 
-    assert result["sampleCount"] == 2
-    assert result["trainingStateUnchanged"] is True
-    assert (agent.total_steps, agent.training_steps, len(agent.replay_buffer)) == before
-    assert agent.trainingEnabled is True
+    assert len(evaluator.matchResults) == 132
+    assert len({
+        frozenset((match["agentAIndex"], match["agentBIndex"]))
+        for match in evaluator.matchResults
+    }) == 66
+    orientations = {}
+    for match in evaluator.matchResults:
+        key = frozenset((match["agentAIndex"], match["agentBIndex"]))
+        orientations.setdefault(key, set()).add(match["reversedSides"])
+    assert all(sides == {False, True} for sides in orientations.values())
+    assert evaluator.maxConcurrentObserved == 6
+    assert all(result["sampleCount"] == 22 for result in results)
+    assert all(result["trainingStateUnchanged"] for result in results)
+    assert all(result["weightsUnchanged"] for result in results)
+    assert [
+        (agent.total_steps, agent.training_steps, len(agent.replay_buffer))
+        for agent in agents
+    ] == before
+    assert all(agent.trainingEnabled for agent in agents)
 
 
 def test_elite_and_offspring_weight_inheritance_is_safe():
@@ -138,8 +161,10 @@ def test_complete_three_generation_run(tmp_path):
         epsilonMin=0.0,
         epsilonDecaySteps=10,
     )
-    evaluation = EvaluationConfiguration(seeds=(23,), maxStepsPerMatch=5, winScore=1)
-    genomes = [Genome((32,)) for _ in range(10)]
+    evaluation = EvaluationConfiguration(
+        seeds=(23,), maxStepsPerMatch=2, winScore=1, maxConcurrentMatches=6
+    )
+    genomes = [Genome((32,)) for _ in range(12)]
 
     with EvolutionStore(tmp_path / "evolution.db", tmp_path / "checkpoints") as store:
         service = EvolutionTrainingService(
@@ -159,14 +184,23 @@ def test_complete_three_generation_run(tmp_path):
 
         assert summary["status"] == "completed"
         assert len(summary["generations"]) == 3
+        assert len({id(agent.dqn) for agent in service.agents}) == 12
+        assert len({id(agent.dqn.policy_net) for agent in service.agents}) == 12
+        assert len({id(agent.dqn.target_net) for agent in service.agents}) == 12
+        assert len({id(agent.dqn.optimizer) for agent in service.agents}) == 12
+        assert len({id(agent.dqn.replay_buffer) for agent in service.agents}) == 12
+        assert len({id(agent.dqn.randomGenerator) for agent in service.agents}) == 12
         generations = store.list_generations(summary["runId"])
         assert [row["generation_index"] for row in generations] == [0, 1, 2]
         assert all(row["status"] == "completed" for row in generations)
 
         for index, generation in enumerate(summary["generations"]):
             agents = store.list_agents(generation["generationId"])
-            assert generation["populationSize"] == len(agents) == 10
-            assert len(generation["evaluation"]) == 10
+            assert generation["populationSize"] == len(agents) == 12
+            assert len(generation["evaluation"]) == 12
+            assert generation["evaluationMatchCount"] == 132
+            assert generation["evaluationMaxConcurrency"] == 6
+            assert all(item["sampleCount"] == 22 for item in generation["evaluation"])
             assert all(item["trainingStateUnchanged"] for item in generation["evaluation"])
             if index > 0:
                 assert generation["eliteInheritanceVerified"] is True
@@ -176,7 +210,7 @@ def test_complete_three_generation_run(tmp_path):
                 "(SELECT id FROM agents WHERE generation_id = ?) ORDER BY agent_id",
                 (summary["runId"], generation["generationId"]),
             ).fetchall()
-            assert len(persisted) == 10
+            assert len(persisted) == 12
             assert [row["fitness"] for row in persisted] == pytest.approx(
                 [item["fitness"] for item in generation["evaluation"]]
             )
@@ -185,13 +219,13 @@ def test_complete_three_generation_run(tmp_path):
                 for row in persisted
             )
             if index < 2:
-                assert len(generation["selectedParentIndices"]) == 4
+                assert len(generation["selectedParentIndices"]) == 6
                 assert len(generation["eliteParentIndices"]) == 2
-                assert generation["offspringCount"] == 8
+                assert generation["offspringCount"] == 10
                 selected = set(generation["selectedParentIndices"])
                 scores = [item["fitness"] for item in generation["evaluation"]]
                 assert min(scores[i] for i in selected) >= max(
-                    scores[i] for i in range(10) if i not in selected
+                    scores[i] for i in range(12) if i not in selected
                 )
             else:
                 assert generation["offspringCount"] == 0
@@ -210,7 +244,22 @@ def test_complete_three_generation_run(tmp_path):
 
         assert store.connection.execute(
             "SELECT COUNT(*) FROM evaluations WHERE run_id = ?", (summary["runId"],)
-        ).fetchone()[0] == 30
+        ).fetchone()[0] == 36
+
+        evaluationMatches = store.connection.execute(
+            "SELECT agent_a_id, agent_b_id, result_json FROM matches "
+            "WHERE run_id = ? AND mode = 'evaluation_round_robin'",
+            (summary["runId"],),
+        ).fetchall()
+        assert len(evaluationMatches) == 396
+        assert all(
+            len([
+                row for row in evaluationMatches
+                if row["agent_a_id"] == agent["id"] or row["agent_b_id"] == agent["id"]
+            ]) == 22
+            for generation in generations
+            for agent in store.list_agents(generation["id"])
+        )
 
         firstSnapshots = {}
         pairings = {}
@@ -222,7 +271,7 @@ def test_complete_three_generation_run(tmp_path):
             pairings.setdefault(generation, set()).add(
                 (event["agentA"]["id"], event["agentB"]["id"])
             )
-        assert len(firstSnapshots) == 15
+        assert len(firstSnapshots) == 18
         assert all(
             snapshot["agentA"]["score"] == snapshot["agentB"]["score"] == 0
             for snapshot in firstSnapshots.values()

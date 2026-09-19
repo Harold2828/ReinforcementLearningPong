@@ -71,13 +71,34 @@ def make_service(store, configuration=None, seed=42, genomes=None):
     )
 
 
+def test_population_and_court_counts_are_configurable(store):
+    configuration = EvolutionTrainingConfiguration(
+        courtCount=2, stepsPerAgentPerGeneration=2, roundTicks=2
+    )
+    service = EvolutionTrainingService(
+        store,
+        configuration=configuration,
+        geneticConfiguration=GeneticConfiguration(
+            populationSize=4,
+            parentPoolSize=2,
+            elitismCount=1,
+            offspringCount=3,
+            seed=4,
+        ),
+        dqnConfiguration=tiny_dqn_configuration(),
+    )
+
+    assert len(service.genomes) == 4
+    assert service.arenaIds == ("arena-0", "arena-1")
+
+
 def test_round_robin_pairs_cycle_covers_every_pair_once():
-    population = 10
+    population = 12
     cycle = population - 1
     seen = {}
     for round_index in range(cycle):
         pairs = round_robin_pairs(population, round_index)
-        assert len(pairs) == 5
+        assert len(pairs) == 6
         indices = [index for pair in pairs for index in pair[:2]]
         assert sorted(indices) == list(range(population))
         for a, b, reversedSides in pairs:
@@ -150,7 +171,7 @@ def test_run_generation_persists_agents_matches_and_v3_checkpoints(store, tmp_pa
     assert generation["status"] == "completed"
 
     agents = store.list_agents(summary["generationId"])
-    assert len(agents) == 10
+    assert len(agents) == 12
     assert all(agent["role"] == "initial" for agent in agents)
     for agent in agents:
         architecture = json.loads(agent["architecture_json"])
@@ -166,7 +187,7 @@ def test_run_generation_persists_agents_matches_and_v3_checkpoints(store, tmp_pa
     matchCount = store.connection.execute(
         "SELECT COUNT(*) FROM matches WHERE run_id = ?", (summary["runId"],)
     ).fetchone()[0]
-    assert matchCount == 5
+    assert matchCount == 6
 
     eventTypes = [event["type"] for event in events]
     assert "population" in eventTypes
@@ -224,7 +245,7 @@ def test_pairings_and_match_state_persist_across_scheduler_chunks(store):
 
     snapshots = [event for event in events if event.get("type") == "match_snapshot"]
     assert summary["rounds"] == 3
-    assert len({event["matchId"] for event in snapshots}) == 5
+    assert len({event["matchId"] for event in snapshots}) == 6
     for arenaId in {event["arenaId"] for event in snapshots}:
         arenaSnapshots = [event for event in snapshots if event["arenaId"] == arenaId]
         assert len({(event["agentA"]["id"], event["agentB"]["id"]) for event in arenaSnapshots}) == 1
@@ -233,7 +254,7 @@ def test_pairings_and_match_state_persist_across_scheduler_chunks(store):
         )
     assert store.connection.execute(
         "SELECT COUNT(*) FROM matches WHERE run_id = ?", (summary["runId"],)
-    ).fetchone()[0] == 5
+    ).fetchone()[0] == 6
 
 
 def test_point_transitions_never_bootstrap_or_end_continuous_training(store):
@@ -320,7 +341,7 @@ def test_optimizer_interval_preserves_each_agent_replay_transitions(store):
         assert 0 < agent.dqn.training_steps < len(agent.dqn.replay_buffer)
 
 
-def test_rejects_population_outside_spec_five_arenas(store):
+def test_rejects_population_outside_configured_courts(store):
     from app.evolution.genome import Genome
 
     configuration = EvolutionTrainingConfiguration(stepsPerAgentPerGeneration=20, roundTicks=10)

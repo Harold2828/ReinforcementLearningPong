@@ -41,8 +41,8 @@ def test_genome_rejects_out_of_bounds_depth_and_widths():
 def test_initial_population_is_distinct_and_valid():
     ga = seeded()
     population = ga.initial_population()
-    assert len(population) == 10
-    assert len({genome for genome in population}) == 10
+    assert len(population) == 12
+    assert len({genome for genome in population}) == 12
     allowed = set(ga.configuration.allowedWidths)
     for genome in population:
         genome.validate(
@@ -56,15 +56,15 @@ def test_one_hundred_seeded_transitions_keep_critical_invariants():
     for seed in range(1, 101):
         ga = seeded(seed=seed)
         population = list(ga.initial_population())
-        fitness = [seed + index / 10.0 for index in range(10)]
+        fitness = [seed + index / 10.0 for index in range(12)]
         plan = ga.next_generation(population, fitness)
 
         assert plan.generationIndex == 1  # one transition per GA instance
-        assert len(plan.genomes) == 10
+        assert len(plan.genomes) == 12
         assert len(plan.elites) == 2
-        assert len(plan.offspring) == 8
-        assert len(plan.parentPoolIndices) == 4
-        assert len({offspring.childIndex for offspring in plan.offspring} | set(plan.eliteIndices)) == 10
+        assert len(plan.offspring) == 10
+        assert len(plan.parentPoolIndices) == 6
+        assert len({offspring.childIndex for offspring in plan.offspring} | set(plan.eliteIndices)) == 12
         for genome in plan.genomes:
             assert 1 <= genome.depth <= 4
             assert all(width in ga.configuration.allowedWidths for width in genome.hiddenWidths)
@@ -74,11 +74,11 @@ def test_one_hundred_seeded_transitions_keep_critical_invariants():
 def test_elites_preserved_unchanged():
     ga = seeded(seed=7)
     population = list(ga.initial_population())
-    fitness = [float(index % 3) for index in range(10)]  # heavy ties exercise tie-breaks
+    fitness = [float(index % 3) for index in range(12)]  # heavy ties exercise tie-breaks
     plan = ga.next_generation(population, fitness)
 
-    assert len(plan.parentPoolIndices) == 4
-    assert set(plan.parentPoolIndices).issubset(range(10))
+    assert len(plan.parentPoolIndices) == 6
+    assert set(plan.parentPoolIndices).issubset(range(12))
     for elite in plan.elites:
         assert elite.genome == population[elite.parentIndex]
     elite_positions = sorted(elite.childIndex for elite in plan.elites)
@@ -88,7 +88,7 @@ def test_elites_preserved_unchanged():
 def test_same_seed_is_reproducible():
     first = seeded(seed=123)
     second = seeded(seed=123)
-    fitness = [float(index) for index in range(10)]
+    fitness = [float(index) for index in range(12)]
     population_a = first.initial_population()
     population_b = second.initial_population()
     plan_a = first.next_generation(population_a, fitness)
@@ -105,7 +105,7 @@ def test_same_seed_is_reproducible():
 def test_forced_mutation_applies_real_operators_within_bounds():
     ga = seeded(seed=99, mutationProbability=1.0)
     population = list(ga.initial_population())
-    plan = ga.next_generation(population, [float(index) for index in range(10)])
+    plan = ga.next_generation(population, [float(index) for index in range(12)])
 
     allowed = set(ga.configuration.allowedWidths)
     for offspring in plan.offspring:
@@ -119,7 +119,7 @@ def test_lineage_records_integrate_with_spec01_store(tmp_path):
     store = EvolutionStore(db_path=tmp_path / "evolution.sqlite3", checkpoint_root=tmp_path / "checkpoints")
     run_id = store.create_run(
         run_uuid="run-ga-1",
-        config={"population": 10},
+        config={"population": 12},
         seed=42,
         code_revision="spec02",
         fitness_formula="0.65*W + 0.25*D + 0.10*C",
@@ -139,7 +139,7 @@ def test_lineage_records_integrate_with_spec01_store(tmp_path):
         for index, genome in enumerate(previous)
     ]
 
-    plan = ga.next_generation(previous, [float(index) for index in range(10)])
+    plan = ga.next_generation(previous, [float(index) for index in range(12)])
     next_generation_id = store.start_generation(run_id, 1)
     new_ids = [
         store.register_agent(
@@ -152,7 +152,7 @@ def test_lineage_records_integrate_with_spec01_store(tmp_path):
     ]
 
     rows = lineage_records(plan, previous_ids, new_ids)
-    assert len(rows) == 2 + 2 * 8  # elite clones + two parent rows per offspring
+    assert len(rows) == 2 + 2 * 10  # elite clones + two parent rows per offspring
     for row in rows:
         store.record_parentage(child_agent_id=row["child_agent_id"], parent_agent_id=row["parent_agent_id"], mutation_json=row["mutation_json"])
 

@@ -20,7 +20,16 @@ from ..ai.pong_training_env import PongTrainingEnv, PongTrainingEnvConfig
 RUNNING = "running"
 TERMINAL = "terminal"
 
-ARENA_IDS = tuple(f"arena-{index}" for index in range(5))
+DEFAULT_ARENA_COUNT = 6
+
+
+def arena_ids(count: int = DEFAULT_ARENA_COUNT) -> tuple[str, ...]:
+    if count <= 0:
+        raise ValueError("arena count must be greater than zero")
+    return tuple(f"arena-{index}" for index in range(count))
+
+
+ARENA_IDS = arena_ids()
 VELOCITY_SCALE = 100.0
 
 
@@ -286,13 +295,16 @@ class MatchSession:
 
 
 class SimulationEngine:
-    """Five arenas, five isolated matches. No shared mutable state."""
+    """Isolated matches with no shared mutable physics or RNG state."""
 
     def __init__(self, assignments: list[MatchAssignment], config: MatchConfig | None = None):
         self.config = config or MatchConfig()
         self.assignments = list(assignments)
-        if len(self.assignments) != len(ARENA_IDS):
-            raise ValueError(f"SimulationEngine expects {len(ARENA_IDS)} matches")
+        if not self.assignments:
+            raise ValueError("SimulationEngine requires at least one match")
+        identifiers = [assignment.arenaId for assignment in self.assignments]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("SimulationEngine arena identifiers must be unique")
         self.sessions = [MatchSession(assignment, self.config) for assignment in self.assignments]
         self.byArena = {session.assignment.arenaId: session for session in self.sessions}
         self.elapsedSteps = 0

@@ -1,6 +1,6 @@
 # Pong Evolution Technical Documentation
 
-This documentation describes revision `ee9531b` on `genetic-algorithm`.
+This documentation describes the current `genetic-algorithm` working tree.
 
 ## Documents
 
@@ -14,9 +14,9 @@ This documentation describes revision `ee9531b` on `genetic-algorithm`.
 flowchart TB
     UI[Phaser EvolutionTrainingScene] <-->|Socket.IO controls and LIVE batches| S[Flask-SocketIO]
     S --> O[EvolutionTrainingService]
-    O --> A[10 independent DQNAgent instances]
-    O --> P[5 independent MatchSession arenas]
-    O --> E[FixedOpponentEvaluator]
+    O --> A[12 independent DQNAgent instances]
+    O --> P[6 independent MatchSession arenas]
+    O --> E[RoundRobinEvaluator]
     O --> G[GeneticAlgorithm]
     O --> DB[(SQLite EvolutionStore)]
     O --> C[(Versioned checkpoints)]
