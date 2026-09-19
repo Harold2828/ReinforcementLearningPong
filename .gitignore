@@ -9,3 +9,8 @@ Server/models/*.tmp
 .venv/
 .pytest_cache/
 __pycache__/
+*.py[cod]
+
+# Generated Graphify analysis artifacts
+graphify-out/
+Docs
