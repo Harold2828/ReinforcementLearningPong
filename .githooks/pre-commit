@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+git diff --cached --check
+
+changed=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -n "$changed" ] || exit 0
+
+run_python() {
+    if [ -n "${PYTHON:-}" ]; then
+        "$PYTHON" "$@"
+    elif [ -x .venv/Scripts/python.exe ]; then
+        .venv/Scripts/python.exe "$@"
+    elif [ -x .venv/bin/python ]; then
+        .venv/bin/python "$@"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 "$@"
+    elif command -v python >/dev/null 2>&1; then
+        python "$@"
+    elif command -v py >/dev/null 2>&1; then
+        py -3 "$@"
+    else
+        echo "pre-commit: Python is required to check staged .py files" >&2
+        return 1
+    fi
+}
+
+printf '%s\n' "$changed" | while IFS= read -r file; do
+    case "$file" in
+        *.py)
+            git show ":$file" | run_python -c \
+                'import ast, sys; ast.parse(sys.stdin.read(), sys.argv[1])' "$file"
+            ;;
+        *.js|*.mjs|*.cjs)
+            if ! command -v node >/dev/null 2>&1; then
+                echo "pre-commit: Node.js is required to check staged JavaScript" >&2
+                exit 1
+            fi
+            git show ":$file" | node --check
+            ;;
+    esac
+done

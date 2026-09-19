@@ -1,0 +1,85 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+changed_file=$(mktemp)
+test_file=$(mktemp)
+trap 'rm -f "$changed_file" "$test_file"' EXIT HUP INT TERM
+zero=0000000000000000000000000000000000000000
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" != "$zero" ] || continue
+    if [ "$remote_sha" != "$zero" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+        git diff --name-only --diff-filter=ACMR "$remote_sha" "$local_sha" >> "$changed_file"
+    else
+        base=$(git merge-base "$local_sha" "refs/remotes/$1/HEAD" 2>/dev/null || true)
+        if [ -n "$base" ]; then
+            git diff --name-only --diff-filter=ACMR "$base" "$local_sha" >> "$changed_file"
+        else
+            git diff-tree --root --no-commit-id --name-only -r "$local_sha" >> "$changed_file"
+        fi
+    fi
+done
+
+[ -s "$changed_file" ] || exit 0
+sort -u "$changed_file" -o "$changed_file"
+
+frontend=0
+while IFS= read -r file; do
+    case "$file" in
+        Server/app/persistence/*|Server/tests/test_persistence_*.py)
+            printf '%s\n' Server/tests/test_persistence_db.py Server/tests/test_persistence_store.py \
+                Server/tests/test_persistence_checkpoints.py >> "$test_file"
+            ;;
+        Server/app/ai/dqn_agent.py|Server/app/ai/model.py|Server/tests/test_dqn_agent.py)
+            printf '%s\n' Server/tests/test_dqn_agent.py >> "$test_file"
+            ;;
+        Server/app/ai/q_learning_agent.py|Server/tests/test_q_learning_agent.py)
+            printf '%s\n' Server/tests/test_q_learning_agent.py >> "$test_file"
+            ;;
+        Server/app/ai/pong_training_env.py|Server/tests/test_pong_training_env.py)
+            printf '%s\n' Server/tests/test_pong_training_env.py >> "$test_file"
+            ;;
+        Server/app/ai/neural_training_service.py|Server/tests/test_neural_training_service.py)
+            printf '%s\n' Server/tests/test_neural_training_service.py >> "$test_file"
+            ;;
+        Server/app/ai/multi_agent_training_service.py|Server/tests/test_multi_agent_training_service.py)
+            printf '%s\n' Server/tests/test_multi_agent_training_service.py >> "$test_file"
+            ;;
+        Server/app/ai/service_factory.py|Server/app/sockets.py|Server/tests/test_sockets.py)
+            printf '%s\n' Server/tests/test_sockets.py >> "$test_file"
+            ;;
+        Server/tests/test_*.py)
+            printf '%s\n' "$file" >> "$test_file"
+            ;;
+        PongGame/src/*|PongGame/package.json|PongGame/package-lock.json)
+            frontend=1
+            ;;
+    esac
+done < "$changed_file"
+
+if [ -s "$test_file" ]; then
+    sort -u "$test_file" -o "$test_file"
+    if [ -n "${PYTHON:-}" ]; then
+        "$PYTHON" -m pytest $(cat "$test_file")
+    elif [ -x .venv/Scripts/python.exe ]; then
+        .venv/Scripts/python.exe -m pytest $(cat "$test_file")
+    elif [ -x .venv/bin/python ]; then
+        .venv/bin/python -m pytest $(cat "$test_file")
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -m pytest $(cat "$test_file")
+    elif command -v python >/dev/null 2>&1; then
+        python -m pytest $(cat "$test_file")
+    elif command -v py >/dev/null 2>&1; then
+        py -3 -m pytest $(cat "$test_file")
+    else
+        echo "pre-push: Python/pytest is required for affected backend tests" >&2
+        exit 1
+    fi
+fi
+
+if [ "$frontend" -eq 1 ]; then
+    (cd PongGame && "${NPM:-npm}" test)
+fi
