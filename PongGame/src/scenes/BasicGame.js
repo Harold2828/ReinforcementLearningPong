@@ -12,6 +12,11 @@ import {
 } from "../utils/gameState";
 import { GameModeManager } from "../utils/gameModeManager";
 import { championDecision } from "../utils/championController";
+import {
+    createOriginalCourtImage,
+    PONG_PHYSICS,
+    preloadPongAssets,
+} from "../components/pongCourtView";
 
 class BasicGame extends Phaser.Scene {
     constructor() {
@@ -24,7 +29,10 @@ class BasicGame extends Phaser.Scene {
                 sound: null,
                 initial: {
                     position: { x: 400, y: 300 },
-                    velocity: { x: 200, y: 200 },
+                    velocity: {
+                        x: PONG_PHYSICS.initialBallVelocity,
+                        y: PONG_PHYSICS.initialBallVelocity,
+                    },
                 },
             },
             text: {
@@ -69,11 +77,7 @@ class BasicGame extends Phaser.Scene {
     }
 
     preload() {
-        this.load.image("court", "assets/background/court.png");
-        this.load.image("ball", "assets/background/ball.png");
-        this.load.atlas("rackets", "assets/player/rackets.png", "assets/player/rackets.json");
-        this.load.audio("smash", "assets/background/smash.wav");
-        this.load.audio("point", "assets/background/point.mp3");
+        preloadPongAssets(this);
     }
 
     create() {
@@ -117,10 +121,18 @@ update() {
         let stateWasSent = false;
         if (this.trainingActive) {
             if (this.gameModeManager.isAgentAiControlled()) {
-                applyAgentActionToPaddle(this.actors.players[0].racket, this.pendingAgentAction);
+                applyAgentActionToPaddle(
+                    this.actors.players[0].racket,
+                    this.pendingAgentAction,
+                    PONG_PHYSICS.paddleSpeed,
+                );
             }
             if (this.gameModeManager.isOpponentAiControlled()) {
-                applyAgentActionToPaddle(this.actors.players[1].racket, this.pendingOpponentAction);
+                applyAgentActionToPaddle(
+                    this.actors.players[1].racket,
+                    this.pendingOpponentAction,
+                    PONG_PHYSICS.paddleSpeed,
+                );
             }
             this.handleHumanControlsByMode();
             if (!isChampion) {
@@ -215,9 +227,7 @@ update() {
     }
 
     configureCourt() {
-        this.background.court.image = this.add.image(400, 300, "court");
-        this.background.court.image.setOrigin(0.5, 0.5);
-        this.background.court.image.setScale(1, 0.6);
+        this.background.court.image = createOriginalCourtImage(this);
     }
 
     configureBall() {
@@ -315,17 +325,17 @@ update() {
 
     handleManualAgentControls() {
         if (this.cursors.keyboard.up.isDown) {
-            this.actors.players[0].racket.setVelocityY(-500);
+            this.actors.players[0].racket.setVelocityY(-PONG_PHYSICS.paddleSpeed);
         } else if (this.cursors.keyboard.down.isDown) {
-            this.actors.players[0].racket.setVelocityY(500);
+            this.actors.players[0].racket.setVelocityY(PONG_PHYSICS.paddleSpeed);
         }
     }
 
     handleOpponentControls() {
         if (this.cursors.keyboard.w.isDown) {
-            this.actors.players[1].racket.setVelocityY(-500);
+            this.actors.players[1].racket.setVelocityY(-PONG_PHYSICS.paddleSpeed);
         } else if (this.cursors.keyboard.s.isDown) {
-            this.actors.players[1].racket.setVelocityY(500);
+            this.actors.players[1].racket.setVelocityY(PONG_PHYSICS.paddleSpeed);
         }
     }
 
@@ -459,8 +469,14 @@ this.awaitingAiMove = false;
         }
 
         const differenceFromRacket = ball.y - racket.y;
-        ball.setVelocityY(differenceFromRacket * randomNormal(3.5, 1.1));
-        ball.setVelocityX(ball.body.velocity.x * randomNormal(1.5, 0.4));
+        ball.setVelocityY(differenceFromRacket * randomNormal(
+            PONG_PHYSICS.bounceY.mean,
+            PONG_PHYSICS.bounceY.deviation,
+        ));
+        ball.setVelocityX(ball.body.velocity.x * randomNormal(
+            PONG_PHYSICS.bounceX.mean,
+            PONG_PHYSICS.bounceX.deviation,
+        ));
 
         const angle = Math.atan2(ball.body.velocity.y, ball.body.velocity.x);
         ball.setAngle(Phaser.Math.RadToDeg(angle));
@@ -491,8 +507,10 @@ this.awaitingAiMove = false;
         const { x, y } = this.background.ball.initial.position;
         this.background.ball.image.setPosition(x, y);
         this.background.ball.image.setVelocity(
-            randomNormal(175, 40) * (leftBoundaryWasHit ? 1 : -1),
-            randomNormal(170, 25) * (leftBoundaryWasHit ? 1 : -1),
+            randomNormal(PONG_PHYSICS.serveX.mean, PONG_PHYSICS.serveX.deviation)
+                * (leftBoundaryWasHit ? 1 : -1),
+            randomNormal(PONG_PHYSICS.serveY.mean, PONG_PHYSICS.serveY.deviation)
+                * (leftBoundaryWasHit ? 1 : -1),
         );
     }
 }

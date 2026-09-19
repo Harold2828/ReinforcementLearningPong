@@ -139,32 +139,34 @@ export function isStaleMatchSnapshot(currentArena, incoming) {
     return incoming.sequence <= currentArena.sequence;
 }
 
-/** Five-court responsive layout for an 800x600-style viewport. */
+/** Five letterboxed 4:3 courts; gameplay coordinates are never distorted. */
 export function layoutArenas(width, height, arenaCount = ARENA_COUNT) {
     const padding = 10;
     const columns = 3;
     const cellGap = 8;
     const topRowCount = Math.min(columns, arenaCount);
     const bottomRowCount = Math.max(0, arenaCount - topRowCount);
-    const headerHeight = 60;
-
-    const usableWidth = Math.max(1, width - padding * 2 - cellGap * (columns - 1));
-    const cellWidth = usableWidth / columns;
-    const rowHeight = Math.max(1, (height - padding * 2 - headerHeight - cellGap) / 2);
-
-    const startColumn = Math.floor((columns - bottomRowCount) / 2);
+    const headerHeight = 36;
+    const widthLimited = (width - padding * 2 - cellGap * (columns - 1)) / columns;
+    const heightLimited = ((height - padding * 2 - headerHeight - cellGap) / 2) * 4 / 3;
+    const cellWidth = Math.max(1, Math.min(widthLimited, heightLimited));
+    const rowHeight = cellWidth * 3 / 4;
+    const topWidth = topRowCount * cellWidth + (topRowCount - 1) * cellGap;
+    const bottomWidth = bottomRowCount * cellWidth + Math.max(0, bottomRowCount - 1) * cellGap;
+    const topX = (width - topWidth) / 2;
+    const bottomX = (width - bottomWidth) / 2;
+    const contentHeight = rowHeight * 2 + cellGap;
+    const topY = headerHeight + (height - headerHeight - contentHeight) / 2;
     const arenas = [];
     for (let index = 0; index < arenaCount; index += 1) {
         const isTopRow = index < topRowCount;
         const rowIndex = isTopRow ? 0 : 1;
-        const slots = isTopRow ? columns : bottomRowCount;
         const columnIndex = isTopRow ? index : index - topRowCount;
-        const columnOffset = isTopRow ? 0 : startColumn;
         arenas.push({
             index,
             arenaId: ARENA_IDS[index],
-            x: padding + (columnIndex + columnOffset) * (cellWidth + cellGap),
-            y: padding + headerHeight + rowIndex * (rowHeight + cellGap),
+            x: (isTopRow ? topX : bottomX) + columnIndex * (cellWidth + cellGap),
+            y: topY + rowIndex * (rowHeight + cellGap),
             width: Math.round(cellWidth),
             height: Math.round(rowHeight),
         });

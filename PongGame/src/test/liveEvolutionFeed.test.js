@@ -6,6 +6,8 @@ import { SOURCE_LABEL } from "../evolution/evolutionContract";
 function createSensor() {
     const handlers = {};
     return {
+        startEvolutionRun: vi.fn().mockResolvedValue({ status: "started" }),
+        stopEvolutionRun: vi.fn().mockResolvedValue({ status: "stopping" }),
         onEvolutionEvent(callback) {
             handlers.live = callback;
         },
@@ -81,6 +83,21 @@ describe("LiveEvolutionFeed", () => {
         expect(events).toHaveLength(1);
         expect(events[0]).toMatchObject({ type: "match_snapshot", arenaId: "arena-0" });
         expect(events[0].source).toBe(SOURCE_LABEL.LIVE);
+    });
+
+    it("starts a requested run after connecting and stops it on demand", async () => {
+        const sensor = createSensor();
+        const feed = new LiveEvolutionFeed({ sensor });
+        feed.start();
+
+        await feed.startRun({ runUuid: "ui-run" });
+        expect(sensor.startEvolutionRun).not.toHaveBeenCalled();
+
+        sensor.handlers.connection(true);
+        await vi.waitFor(() => expect(sensor.startEvolutionRun).toHaveBeenCalledWith({ runUuid: "ui-run" }));
+
+        await feed.stopRun();
+        expect(sensor.stopEvolutionRun).toHaveBeenCalledTimes(1);
     });
 
     it("drops an invalid match snapshot with a warning instead of rendering it", () => {

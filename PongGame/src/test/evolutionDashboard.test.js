@@ -40,6 +40,18 @@ describe("EvolutionDashboard", () => {
         expect(document.querySelector('[data-dash-role="status"]').textContent).toContain("10 agents");
     });
 
+    it("renders the LIVE genome architecture shape", () => {
+        const dashboard = renderDashboard();
+        const event = populationEvent();
+        event.agents[0].architecture = { schemaVersion: "genome-v1", hiddenWidths: [64, 128] };
+
+        dashboard.handleEvent(event);
+
+        const cells = document.querySelector('[data-dash-role="population"] tr').children;
+        expect(cells[2].textContent).toBe("2");
+        expect(cells[3].textContent).toBe("64, 128");
+    });
+
     it("records the champion promotion", () => {
         const dashboard = renderDashboard();
         dashboard.handleEvent(populationEvent());

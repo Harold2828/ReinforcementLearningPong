@@ -30,10 +30,14 @@ class MatchConfig:
     height: float = 600.0
     agentPaddleX: float = 700.0
     opponentPaddleX: float = 100.0
-    paddleHeight: float = 96.0
-    paddleSpeed: float = 18.0
-    ballSpeedX: float = 12.0
-    ballSpeedY: float = 7.0
+    paddleWidth: float = 50.0
+    paddleHeight: float = 88.0
+    ballWidth: float = 48.1
+    ballHeight: float = 51.9
+    paddleSpeed: float = 500.0
+    ballSpeedX: float = 200.0
+    ballSpeedY: float = 200.0
+    stepSeconds: float = 1.0 / 60.0
     maxStepsPerRally: int = 1000
     maxTotalSteps: int = 5000
     winScore: int = 7
@@ -97,10 +101,14 @@ class MatchSession:
                 height=self.config.height,
                 agentPaddleX=self.config.agentPaddleX,
                 opponentPaddleX=self.config.opponentPaddleX,
+                paddleWidth=self.config.paddleWidth,
                 paddleHeight=self.config.paddleHeight,
+                ballWidth=self.config.ballWidth,
+                ballHeight=self.config.ballHeight,
                 paddleSpeed=self.config.paddleSpeed,
                 ballSpeedX=self.config.ballSpeedX,
                 ballSpeedY=self.config.ballSpeedY,
+                stepSeconds=self.config.stepSeconds,
                 maxStepsPerEpisode=self.config.maxStepsPerRally,
             ),
             randomGenerator=random.Random(self.seed),
@@ -143,14 +151,14 @@ class MatchSession:
         self.pointWinner = self._to_identity_role(result.state.pointWinner)
         self.lastRewards = calculate_adversarial_rewards(self._identity_state())
 
-        if self._match_ended():
-            self.combo = self._rally_streak(self.pointWinner)
-            self.status = TERMINAL
-            return self.snapshot()
-
-        self.combo = 0
+        matchEnded = self._match_ended()
+        self.combo = self._rally_streak(self.pointWinner) if matchEnded else 0
+        serveDirection = 1.0 if result.state.pointWinner == "agent" else -1.0
+        self.env.reset(serveDirection=serveDirection, resetPaddles=False)
         backToServe = self.snapshot()
-        self.env.reset()
+        if matchEnded:
+            self.status = TERMINAL
+            return {**backToServe, "status": TERMINAL}
         self.rallyReturnsA = 0
         self.rallyReturnsB = 0
         return backToServe

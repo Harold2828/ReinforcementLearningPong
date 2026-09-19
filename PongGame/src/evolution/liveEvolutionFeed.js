@@ -24,6 +24,9 @@ class LiveEvolutionFeed {
         this.listeners = [];
         this.unregister = null;
         this.fallbackUnsubscribe = null;
+        this.runRequested = false;
+        this.runStarting = false;
+        this.runPayload = {};
     }
 
     subscribe(listener) {
@@ -52,8 +55,30 @@ class LiveEvolutionFeed {
         if (this.sensor?.onConnectionChange) {
             this.unregister = this.sensor.onConnectionChange((isConnected) => {
                 this.connected = isConnected;
+                if (isConnected) this.startRequestedRun();
             });
         }
+    }
+
+    startRun(payload = {}) {
+        this.runRequested = true;
+        this.runPayload = payload;
+        return this.startRequestedRun();
+    }
+
+    async startRequestedRun() {
+        if (!this.connected || this.runStarting || !this.runRequested) return null;
+        this.runStarting = true;
+        try {
+            return await this.sensor?.startEvolutionRun?.(this.runPayload);
+        } finally {
+            this.runStarting = false;
+        }
+    }
+
+    stopRun() {
+        this.runRequested = false;
+        return this.sensor?.stopEvolutionRun?.() ?? Promise.resolve(null);
     }
 
     stop() {
@@ -93,6 +118,9 @@ class LiveEvolutionFeed {
     publish(event) {
         if (event == null) {
             return;
+        }
+        if (event.type === "run_finished" || event.type === "run_error") {
+            this.runRequested = false;
         }
         this.listeners.forEach((listener) => listener(event));
     }

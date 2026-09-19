@@ -11,6 +11,7 @@ from app.evolution.simulation import TERMINAL, MatchConfig
 from app.evolution.training_orchestrator import (
     EvolutionTrainingConfiguration,
     EvolutionTrainingService,
+    RunController,
     identity_rewards,
     pong_state_from_envelope,
     round_robin_pairs,
@@ -26,6 +27,17 @@ def store(tmp_path):
 
 def open_store(base_path):
     return EvolutionStore(base_path / "evolution.db", base_path / "checkpoints")
+
+
+def test_run_controller_resets_between_ui_runs():
+    controller = RunController()
+    controller.request_stop()
+    controller.pause()
+
+    controller.reset()
+
+    assert controller.stopRequested is False
+    assert controller.wait_if_paused() is True
 
 
 def tiny_dqn_configuration() -> DQNConfiguration:
@@ -152,6 +164,9 @@ def test_run_generation_persists_agents_matches_and_v3_checkpoints(store, tmp_pa
     assert "training_metrics" in eventTypes
     assert "match_snapshot" in eventTypes
     assert all(event.get("source") == "LIVE" for event in events)
+    population = next(event for event in events if event["type"] == "population")
+    assert population["runId"] == f"run-{summary['runId']}"
+    assert population["generationId"] == f"generation-{summary['generationId']}"
 
 
 def test_run_generation_is_deterministic_across_stores(tmp_path):
@@ -189,7 +204,7 @@ def test_terminal_transitions_never_bootstrap(store):
         stepsPerAgentPerGeneration=100_000,
         roundTicks=600,
         metricsInterval=1,
-        winScore=7,
+        winScore=1,
     )
     service = make_service(store, configuration=configuration, seed=3)
     service.on_event = captured.append

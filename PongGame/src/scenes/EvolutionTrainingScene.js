@@ -1,13 +1,13 @@
 import Phaser from "phaser";
-import { EVOLUTION_EVENT_TYPES, SOURCE_LABEL, layoutArenas } from "../evolution/evolutionContract";
+import { EVOLUTION_EVENT_TYPES, layoutArenas } from "../evolution/evolutionContract";
 import { applySnapshot, createArenaBoard, snapshotFor } from "../evolution/arenaState";
+import {
+    applySnapshotToCourt,
+    createSnapshotCourt,
+    preloadPongAssets,
+} from "../components/pongCourtView";
 
-/**
- * EVOLUTION_TRAINING view: renders five Pong arenas from snapshot envelopes.
- * The scene is a pure visualization layer — no physics, no training, no ball
- * stepping. Position updates come only from the subscribed feed.
- */
-
+/** Pure LIVE snapshot renderer; authoritative physics remains on the backend. */
 class EvolutionTrainingScene extends Phaser.Scene {
     constructor() {
         super({ key: "EvolutionTraining" });
@@ -20,46 +20,28 @@ class EvolutionTrainingScene extends Phaser.Scene {
         this.feed = data?.feed ?? null;
     }
 
+    preload() {
+        preloadPongAssets(this);
+    }
+
     create() {
         const { width, height } = this.sys.game.canvas;
         this.layout = layoutArenas(width, height);
-
-        this.add.text(10, 10, "EVOLUTION TRAINING — LIVE Socket.IO stream (SPEC-06)", {
+        this.add.text(10, 10, "EVOLUTION TRAINING — LIVE", {
             fontSize: "12px",
             fontFamily: "'Press Start 2P', 'Courier New', monospace",
             fill: "#f4d03f",
         });
-
-        this.arenas = this.layout.map((rect) => this.createArena(rect));
+        this.arenas = this.layout.map((bounds) => createSnapshotCourt(this, bounds));
         if (this.feed) {
             this.unsubscribe = this.feed.subscribe((event) => this.handleEvent(event));
+            this.feed.startRun?.({ runUuid: `ui-evolution-${Date.now()}` });
         }
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-            if (this.unsubscribe) {
-                this.unsubscribe();
-                this.unsubscribe = null;
-            }
+            if (this.unsubscribe) this.unsubscribe();
+            this.unsubscribe = null;
+            this.feed?.stopRun?.();
         });
-    }
-
-    createArena(rect) {
-        const frame = this.add.graphics();
-        frame.lineStyle(2, 0x47d18c, 1);
-        frame.strokeRect(rect.x, rect.y, rect.width, rect.height);
-        frame.lineStyle(1, 0x2d3138, 1);
-        frame.lineBetween(rect.x + rect.width / 2, rect.y, rect.x + rect.width / 2, rect.y + rect.height);
-
-        const paddleA = this.add.graphics();
-        const paddleB = this.add.graphics();
-        const ball = this.add.graphics();
-        const hud = this.add.text(rect.x + 4, rect.y + 4, "", {
-            fontSize: "9px",
-            fontFamily: "'Press Start 2P', 'Courier New', monospace",
-            fill: "#f4f7fb",
-            backgroundColor: "rgba(0,0,0,0.6)",
-        });
-
-        return { rect, frame, paddleA, paddleB, ball, hud };
     }
 
     handleEvent(event) {
@@ -70,50 +52,11 @@ class EvolutionTrainingScene extends Phaser.Scene {
 
     update() {
         this.arenas.forEach((arena) => {
-            const snapshot = snapshotFor(this.board, arena.rect.arenaId);
-            if (snapshot) {
-                this.redrawArena(arena, snapshot);
+            const snapshot = snapshotFor(this.board, arena.bounds.arenaId);
+            if (snapshot && snapshot !== arena.previous) {
+                applySnapshotToCourt(arena, snapshot);
             }
         });
-    }
-
-    redrawArena(arena, snapshot) {
-        const { rect } = arena;
-        const ballX = rect.x + snapshot.ball.x * rect.width;
-        const ballY = rect.y + snapshot.ball.y * rect.height;
-        const paddleHeight = Math.max(12, rect.height * 0.18);
-        const paddleWidth = 5;
-
-        arena.paddleA.clear();
-        arena.paddleA.fillStyle(0x2f80ed, 1);
-        arena.paddleA.fillRect(
-            rect.x + snapshot.agentA.paddleX * rect.width - paddleWidth / 2,
-            rect.y + snapshot.agentA.paddleY * rect.height - paddleHeight / 2,
-            paddleWidth,
-            paddleHeight,
-        );
-
-        arena.paddleB.clear();
-        arena.paddleB.fillStyle(0xe86f2f, 1);
-        arena.paddleB.fillRect(
-            rect.x + snapshot.agentB.paddleX * rect.width - paddleWidth / 2,
-            rect.y + snapshot.agentB.paddleY * rect.height - paddleHeight / 2,
-            paddleWidth,
-            paddleHeight,
-        );
-
-        arena.ball.clear();
-        arena.ball.fillStyle(0xffffff, 1);
-        arena.ball.fillCircle(ballX, ballY, 4);
-
-        arena.hud.setText(
-            [
-                `A ${snapshot.agentA.id} g${snapshot.agentA.generation} S:${snapshot.agentA.score} \u03b5${snapshot.agentA.epsilon.toFixed(2)}`,
-                `B ${snapshot.agentB.id} g${snapshot.agentB.generation} S:${snapshot.agentB.score} \u03b5${snapshot.agentB.epsilon.toFixed(2)}`,
-                `steps ${snapshot.step} elapsed ${snapshot.elapsedSteps} | ${snapshot.status}`,
-                `source ${snapshot.source === SOURCE_LABEL.MOCK ? SOURCE_LABEL.MOCK : SOURCE_LABEL.LIVE}`,
-            ].join("\n"),
-        );
     }
 }
 

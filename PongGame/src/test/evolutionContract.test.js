@@ -65,6 +65,7 @@ describe("evolution data contract", () => {
             expect(arena.y).toBeGreaterThanOrEqual(0);
             expect(arena.x + arena.width).toBeLessThanOrEqual(800);
             expect(arena.y + arena.height).toBeLessThanOrEqual(600);
+            expect(arena.width / arena.height).toBeCloseTo(4 / 3, 2);
         }
         expect(arenas[0].y).toBe(arenas[1].y);
         expect(arenas[2].y).toBe(arenas[1].y);

@@ -67,7 +67,10 @@ def test_matches_are_isolated_under_divergent_actions():
 
 def test_paddle_collision_precedes_boundary_and_records_returns():
     session = MatchSession(assignment(), MatchConfig())
-    session.env.ballX = session.config.agentPaddleX
+    contact = session.config.agentPaddleX - (
+        session.config.paddleWidth + session.config.ballWidth
+    ) / 2
+    session.env.ballX = contact - session.env.ballVelocityX * session.config.stepSeconds + 0.01
     session.env.ballY = session.env.agentPaddleY
     session.env.ballVelocityX = session.config.ballSpeedX
     session.env.ballVelocityY = 0
@@ -88,6 +91,27 @@ def test_wall_bounce_flips_vertical_velocity():
     session.step("STAY", "STAY")
 
     assert session.env.ballVelocityY > 0
+
+
+def test_point_reset_matches_classic_serve_without_resetting_paddles(monkeypatch):
+    session = MatchSession(assignment(), MatchConfig())
+    session.env.agentPaddleY = 220
+    session.env.opponentPaddleY = 380
+    samples = iter((175.0, 170.0))
+    monkeypatch.setattr(session.env, "_random_normal", lambda *_: next(samples))
+    session.env.ballX = session.config.width - session.config.ballWidth / 2 - 1
+    session.env.ballVelocityX = session.config.ballSpeedX
+    session.env.ballVelocityY = 0
+
+    envelope = session.step("STAY", "STAY")
+
+    assert envelope["pointWinner"] == "opponent"
+    assert envelope["ball"]["x"] == 0.5
+    assert envelope["ball"]["y"] == 0.5
+    assert envelope["ball"]["vx"] == -1.75
+    assert envelope["ball"]["vy"] == -1.7
+    assert session.env.agentPaddleY == 220
+    assert session.env.opponentPaddleY == 380
 
 
 def test_scoring_ownership_right_paddle_is_agent_left_is_opponent():

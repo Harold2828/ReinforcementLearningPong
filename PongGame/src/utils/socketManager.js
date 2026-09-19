@@ -30,6 +30,20 @@ class SocketManager {
         this.socket.on("evolution_event", callback);
     }
 
+    startEvolutionRun(payload = {}) {
+        if (!this.socket?.connected) {
+            return Promise.resolve({ status: "disconnected" });
+        }
+        return this.socket.timeout(10_000).emitWithAck("evolution_start_run", payload);
+    }
+
+    stopEvolutionRun() {
+        if (!this.socket?.connected) {
+            return Promise.resolve({ status: "disconnected" });
+        }
+        return this.socket.timeout(10_000).emitWithAck("evolution_stop_run");
+    }
+
     sendStateUpdate(environmentState) {
         if (this.socket?.connected) {
             this.socket.emit("state_update", environmentState);

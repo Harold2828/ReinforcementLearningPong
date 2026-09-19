@@ -204,6 +204,11 @@ class RunController:
         self._stopRequested = True
         self._resumed.set()
 
+    def reset(self) -> None:
+        self._stopRequested = False
+        self._paused.clear()
+        self._resumed.clear()
+
     def pause(self) -> None:
         self._paused.set()
 
@@ -353,6 +358,7 @@ class EvolutionTrainingService:
         """Train, evaluate, and reproduce a complete configurable run."""
         from .evaluation import EvaluationConfiguration, FitnessConfiguration, FixedOpponentEvaluator
 
+        self.controller.reset()
         evaluationConfiguration = evaluationConfiguration or self.evaluationConfiguration
         fitnessConfiguration = fitnessConfiguration or self.fitnessConfiguration
         evaluator = FixedOpponentEvaluator(evaluationConfiguration, fitnessConfiguration, self.matchConfig)
@@ -584,8 +590,8 @@ class EvolutionTrainingService:
             {
                 "type": "population",
                 "source": EVENT_SOURCE_LIVE,
-                "runId": self.runId,
-                "generationId": self.generationId,
+                "runId": f"run-{self.runId}",
+                "generationId": f"generation-{self.generationId}",
                 "agents": self._agent_summaries(),
             }
         )

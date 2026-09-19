@@ -16,6 +16,13 @@ function formatFitness(fitness) {
         .join(" | ");
 }
 
+function architectureFields(architecture = {}) {
+    const widths = Array.isArray(architecture.widths)
+        ? architecture.widths
+        : Array.isArray(architecture.hiddenWidths) ? architecture.hiddenWidths : [];
+    return { widths, layerCount: architecture.layerCount ?? widths.length };
+}
+
 class EvolutionDashboard {
     constructor(root) {
         this.root = root;
@@ -56,11 +63,12 @@ class EvolutionDashboard {
         this.populationBody.replaceChildren(
             ...event.agents.map((agent) => {
                 const row = document.createElement("tr");
+                const architecture = architectureFields(agent.architecture);
                 row.innerHTML = [
                     `<td>${agent.agentId}</td>`,
                     `<td>${agent.role}</td>`,
-                    `<td>${agent.architecture.layerCount}</td>`,
-                    `<td>${agent.architecture.widths.join(", ")}</td>`,
+                    `<td>${architecture.layerCount}</td>`,
+                    `<td>${architecture.widths.join(", ")}</td>`,
                     `<td>${formatFitness(agent.fitness)}</td>`,
                     `<td>${Array.isArray(agent.lineage) && agent.lineage.length ? agent.lineage.join(" ← ") : "seed"}</td>`,
                     `<td>${agent.status}</td>`,

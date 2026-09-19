@@ -12,4 +12,4 @@ COPY . .
 
 EXPOSE 5001
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--graceful-timeout", "0", "run:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--worker-class", "gthread", "--workers", "1", "--threads", "100", "--timeout", "0", "run:app"]
