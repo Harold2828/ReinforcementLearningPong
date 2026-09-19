@@ -27,11 +27,27 @@ done
 sort -u "$changed_file" -o "$changed_file"
 
 frontend=0
+spec01=0
+spec02=0
 while IFS= read -r file; do
     case "$file" in
         Server/app/persistence/*|Server/tests/test_persistence_*.py)
+            spec01=1
             printf '%s\n' Server/tests/test_persistence_db.py Server/tests/test_persistence_store.py \
                 Server/tests/test_persistence_checkpoints.py >> "$test_file"
+            ;;
+        Server/app/evolution/fitness.py|Server/app/evolution/evaluation.py|Server/app/evaluation/*|Server/tests/test_fitness*.py|Server/tests/test_evaluation*.py)
+            fitness_tests=$(find Server/tests -maxdepth 1 -type f \
+                \( -name 'test_fitness*.py' -o -name 'test_evaluation*.py' \))
+            if [ -z "$fitness_tests" ]; then
+                echo "pre-push: fitness/evaluation changed but no targeted tests exist" >&2
+                exit 1
+            fi
+            printf '%s\n' "$fitness_tests" >> "$test_file"
+            ;;
+        Server/app/evolution/*|Server/tests/test_evolution_*.py)
+            spec02=1
+            printf '%s\n' Server/tests/test_evolution_genetic.py >> "$test_file"
             ;;
         Server/app/ai/dqn_agent.py|Server/app/ai/model.py|Server/tests/test_dqn_agent.py)
             printf '%s\n' Server/tests/test_dqn_agent.py >> "$test_file"
@@ -39,17 +55,15 @@ while IFS= read -r file; do
         Server/app/ai/q_learning_agent.py|Server/tests/test_q_learning_agent.py)
             printf '%s\n' Server/tests/test_q_learning_agent.py >> "$test_file"
             ;;
-        Server/app/ai/pong_training_env.py|Server/tests/test_pong_training_env.py)
-            printf '%s\n' Server/tests/test_pong_training_env.py >> "$test_file"
-            ;;
-        Server/app/ai/neural_training_service.py|Server/tests/test_neural_training_service.py)
-            printf '%s\n' Server/tests/test_neural_training_service.py >> "$test_file"
-            ;;
-        Server/app/ai/multi_agent_training_service.py|Server/tests/test_multi_agent_training_service.py)
-            printf '%s\n' Server/tests/test_multi_agent_training_service.py >> "$test_file"
+        Server/app/ai/pong_training_env.py|Server/app/ai/neural_training_service.py|Server/app/ai/multi_agent_training_service.py|Server/tests/test_pong_training_env.py|Server/tests/test_neural_training_service.py|Server/tests/test_multi_agent_training_service.py)
+            printf '%s\n' Server/tests/test_pong_training_env.py \
+                Server/tests/test_neural_training_service.py \
+                Server/tests/test_multi_agent_training_service.py >> "$test_file"
             ;;
         Server/app/ai/service_factory.py|Server/app/sockets.py|Server/tests/test_sockets.py)
-            printf '%s\n' Server/tests/test_sockets.py >> "$test_file"
+            printf '%s\n' Server/tests/test_sockets.py \
+                Server/tests/test_neural_training_service.py \
+                Server/tests/test_multi_agent_training_service.py >> "$test_file"
             ;;
         Server/tests/test_*.py)
             printf '%s\n' "$file" >> "$test_file"
@@ -59,6 +73,12 @@ while IFS= read -r file; do
             ;;
     esac
 done < "$changed_file"
+
+if [ "$spec01" -eq 1 ] && [ "$spec02" -eq 0 ] && [ -f Server/tests/test_evolution_genetic.py ]; then
+    printf '%s\n' \
+        'Server/tests/test_evolution_genetic.py::test_lineage_records_integrate_with_spec01_store' \
+        >> "$test_file"
+fi
 
 if [ -s "$test_file" ]; then
     sort -u "$test_file" -o "$test_file"
@@ -81,5 +101,5 @@ if [ -s "$test_file" ]; then
 fi
 
 if [ "$frontend" -eq 1 ]; then
-    (cd PongGame && "${NPM:-npm}" test)
+    (cd PongGame && "${NPM:-npm}" test && "${NPM:-npm}" run build)
 fi

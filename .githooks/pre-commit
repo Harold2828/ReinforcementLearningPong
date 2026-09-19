@@ -9,6 +9,23 @@ git diff --cached --check
 changed=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -n "$changed" ] || exit 0
 
+run_ruff() {
+    if [ -x .venv/Scripts/ruff.exe ]; then
+        .venv/Scripts/ruff.exe "$@"
+    elif [ -x .venv/bin/ruff ]; then
+        .venv/bin/ruff "$@"
+    elif command -v ruff >/dev/null 2>&1; then
+        ruff "$@"
+    else
+        return 127
+    fi
+}
+
+ruff_available=0
+if [ -x .venv/Scripts/ruff.exe ] || [ -x .venv/bin/ruff ] || command -v ruff >/dev/null 2>&1; then
+    ruff_available=1
+fi
+
 run_python() {
     if [ -n "${PYTHON:-}" ]; then
         "$PYTHON" "$@"
@@ -30,9 +47,25 @@ run_python() {
 
 printf '%s\n' "$changed" | while IFS= read -r file; do
     case "$file" in
+        .env|*/.env|*.pem|*.key|*.p12|*.pfx|*.sqlite|*.sqlite3|*.db|*.pt|*.pth|*.ckpt)
+            echo "pre-commit: refusing sensitive/generated file: $file" >&2
+            exit 1
+            ;;
+    esac
+
+    if git show ":$file" | grep -I -E -q \
+        'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|gh[pousr]_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9_-]{20,}'; then
+        echo "pre-commit: possible secret detected in $file" >&2
+        exit 1
+    fi
+
+    case "$file" in
         *.py)
             git show ":$file" | run_python -c \
                 'import ast, sys; ast.parse(sys.stdin.read(), sys.argv[1])' "$file"
+            if [ "$ruff_available" -eq 1 ]; then
+                run_ruff check --no-cache "$file"
+            fi
             ;;
         *.js|*.mjs|*.cjs)
             if ! command -v node >/dev/null 2>&1; then
@@ -43,3 +76,9 @@ printf '%s\n' "$changed" | while IFS= read -r file; do
             ;;
     esac
 done
+
+frontend_changed=$(printf '%s\n' "$changed" | grep -E '^PongGame/.*\.(js|mjs|cjs)$' || true)
+if [ -n "$frontend_changed" ] && node -e \
+    "const p=require('./PongGame/package.json'); process.exit(p.scripts?.lint ? 0 : 1)"; then
+    (cd PongGame && "${NPM:-npm}" run lint)
+fi
