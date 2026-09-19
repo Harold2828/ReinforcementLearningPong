@@ -13,4 +13,4 @@ __pycache__/
 
 # Generated Graphify analysis artifacts
 graphify-out/
-Docs
+/Docs/pong_evolution_specs/
