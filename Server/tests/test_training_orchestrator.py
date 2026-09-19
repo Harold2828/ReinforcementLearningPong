@@ -166,7 +166,7 @@ def test_run_generation_persists_agents_matches_and_v3_checkpoints(store, tmp_pa
     matchCount = store.connection.execute(
         "SELECT COUNT(*) FROM matches WHERE run_id = ?", (summary["runId"],)
     ).fetchone()[0]
-    assert matchCount == summary["rounds"] * 5
+    assert matchCount == 5
 
     eventTypes = [event["type"] for event in events]
     assert "population" in eventTypes
@@ -208,7 +208,35 @@ def test_run_generation_is_deterministic_across_stores(tmp_path):
         )
 
 
-def test_terminal_transitions_never_bootstrap(store):
+def test_pairings_and_match_state_persist_across_scheduler_chunks(store):
+    events = []
+    configuration = EvolutionTrainingConfiguration(
+        stepsPerAgentPerGeneration=60,
+        roundTicks=20,
+        snapshotInterval=10,
+        metricsInterval=10,
+        optimizerInterval=32,
+    )
+    service = make_service(store, configuration=configuration, seed=11)
+    service.on_event = events.append
+
+    summary = service.run_generation(runUuid="run-continuous-generation", seed=11)
+
+    snapshots = [event for event in events if event.get("type") == "match_snapshot"]
+    assert summary["rounds"] == 3
+    assert len({event["matchId"] for event in snapshots}) == 5
+    for arenaId in {event["arenaId"] for event in snapshots}:
+        arenaSnapshots = [event for event in snapshots if event["arenaId"] == arenaId]
+        assert len({(event["agentA"]["id"], event["agentB"]["id"]) for event in arenaSnapshots}) == 1
+        assert [event["sequence"] for event in arenaSnapshots] == sorted(
+            event["sequence"] for event in arenaSnapshots
+        )
+    assert store.connection.execute(
+        "SELECT COUNT(*) FROM matches WHERE run_id = ?", (summary["runId"],)
+    ).fetchone()[0] == 5
+
+
+def test_point_transitions_never_bootstrap_or_end_continuous_training(store):
     captured = []
     configuration = EvolutionTrainingConfiguration(
         stepsPerAgentPerGeneration=100_000,
@@ -221,12 +249,17 @@ def test_terminal_transitions_never_bootstrap(store):
 
     service.run_generation(runUuid="run-no-bootstrap", seed=3, maxRounds=1)
 
-    terminalEnvelopes = [
+    snapshotEnvelopes = [
         event
         for event in captured
-        if event.get("type") == "match_snapshot" and event.get("status") == TERMINAL
+        if event.get("type") == "match_snapshot"
     ]
-    assert terminalEnvelopes, "expected at least one terminal match in the round"
+    assert snapshotEnvelopes
+    assert all(event["status"] != TERMINAL for event in snapshotEnvelopes)
+    assert any(
+        event["agentA"]["score"] + event["agentB"]["score"] >= 1
+        for event in snapshotEnvelopes
+    ), "expected scores to accumulate without ending training"
 
     sawDone = False
     for agent in service.agents:

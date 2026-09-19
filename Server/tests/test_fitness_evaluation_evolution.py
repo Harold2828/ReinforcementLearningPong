@@ -119,11 +119,12 @@ def test_elite_and_offspring_weight_inheritance_is_safe():
 
 
 def test_complete_three_generation_run(tmp_path):
+    events = []
     training = EvolutionTrainingConfiguration(
         stepsPerAgentPerGeneration=2,
         roundTicks=2,
         maxGenerations=3,
-        snapshotInterval=10,
+        snapshotInterval=1,
         metricsInterval=10,
         winScore=1,
         device="cpu",
@@ -147,6 +148,7 @@ def test_complete_three_generation_run(tmp_path):
             geneticConfiguration=genetic,
             dqnConfiguration=dqn,
             genomes=genomes,
+            onEvent=events.append,
         )
         summary = service.run_evolution(
             runUuid="spec-07-three-generation",
@@ -209,3 +211,20 @@ def test_complete_three_generation_run(tmp_path):
         assert store.connection.execute(
             "SELECT COUNT(*) FROM evaluations WHERE run_id = ?", (summary["runId"],)
         ).fetchone()[0] == 30
+
+        firstSnapshots = {}
+        pairings = {}
+        for event in events:
+            if event.get("type") != "match_snapshot":
+                continue
+            generation = event["generationId"]
+            firstSnapshots.setdefault((generation, event["arenaId"]), event)
+            pairings.setdefault(generation, set()).add(
+                (event["agentA"]["id"], event["agentB"]["id"])
+            )
+        assert len(firstSnapshots) == 15
+        assert all(
+            snapshot["agentA"]["score"] == snapshot["agentB"]["score"] == 0
+            for snapshot in firstSnapshots.values()
+        )
+        assert len({frozenset(items) for items in pairings.values()}) == 3

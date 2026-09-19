@@ -1,7 +1,7 @@
 """SPEC-06 evolutionary training orchestration.
 
 Runs the SPEC-02 population as isolated SPEC-04 DQN agents competing on the
-SPEC-05 headless engine with round-robin opponent/side rotation, persisting
+SPEC-05 headless engine with generation-boundary opponent/side rotation, persisting
 matches and v3 checkpoints to the SPEC-01 store and streaming LIVE snapshots
 and metrics to SPEC-03 over Socket.IO.
 
@@ -263,7 +263,10 @@ class EvolutionTrainingService:
         self.geneticConfiguration.validate()
         self.dqnConfiguration = dqnConfiguration or DQNConfiguration()
         self.dqnConfiguration.validate()
-        self.matchConfig = MatchConfig(winScore=self.configuration.winScore)
+        self.matchConfig = MatchConfig(
+            winScore=self.configuration.winScore,
+            continuousPlay=True,
+        )
         self.codeRevision = codeRevision
         self.benchmarkDefinition = benchmarkDefinition
         self.on_event = onEvent
@@ -292,6 +295,14 @@ class EvolutionTrainingService:
         self._sideLastReturns: dict[tuple[str, str], int] = {}
         self._lastSequences: dict[str, int] = {}
         self._eliteInheritanceVerified = True
+        self._engine: SimulationEngine | None = None
+        self._generationPairs: list[tuple[int, int, bool]] = []
+        self._generationMatchSeeds: list[int] = []
+        self._pendingActions: dict[str, tuple[str, str]] = {}
+        self._generationStartedAt = 0.0
+        self._generationTicks = 0
+        self._emittedBatches = 0
+        self._lastEnvelopes: list[dict] = []
 
     def _emit(self, event: dict) -> None:
         if self.on_event is not None:
@@ -308,6 +319,7 @@ class EvolutionTrainingService:
         self.generationIndex = 0
         self.runUuid = runUuid
         self.agents = []
+        self._reset_generation_simulation()
         self.runId = self.store.create_run(
             runUuid,
             asdict(self.configuration),
@@ -337,6 +349,7 @@ class EvolutionTrainingService:
                     self._emit_metrics()
                 if self.controller.stopRequested:
                     break
+            self._record_generation_matches()
         except BaseException:
             self.store.set_run_status(self.runId, "cancelled")
             self.store.abort_generation(self.generationId)
@@ -395,6 +408,7 @@ class EvolutionTrainingService:
             for generationIndex in range(self.configuration.maxGenerations):
                 self.generationIndex = generationIndex
                 self._roundIndex = 0
+                self._reset_generation_simulation()
                 self.generationId = self.store.start_generation(self.runId, generationIndex)
                 self.agents = []
                 self._eliteInheritanceVerified = True
@@ -503,6 +517,7 @@ class EvolutionTrainingService:
                 self._emit_metrics()
             if self.controller.stopRequested:
                 return
+        self._record_generation_matches()
 
     def _build_agents(
         self,
@@ -613,12 +628,68 @@ class EvolutionTrainingService:
         return any(agent.dqn.total_steps < budget for agent in self.agents)
 
     def _run_round(self, seed: int, roundIndex: int) -> list[dict]:
-        pairs = round_robin_pairs(len(self.agents), roundIndex)
+        if self._engine is None:
+            self._start_generation_simulation(seed)
+        pairs = self._generationPairs
+        engine = self._engine
+        assert engine is not None
+
+        lastEnvelopes: list[dict] | None = None
+        for _ in range(self.configuration.roundTicks):
+            envelopes = engine.step(self._pendingActions)
+            self._generationTicks += 1
+            lastEnvelopes = envelopes
+            self._lastEnvelopes = envelopes
+            for arenaIndex, envelope in enumerate(envelopes):
+                aIndex, bIndex, _ = pairs[arenaIndex]
+                arenaId = envelope["arenaId"]
+                if envelope["sequence"] <= self._lastSequences.get(arenaId, 0):
+                    continue
+                self._lastSequences[arenaId] = envelope["sequence"]
+                nextActions = self._advance_envelope(envelope, aIndex, bIndex)
+                if envelope["status"] != TERMINAL:
+                    self._pendingActions[arenaId] = nextActions
+            if self._generationTicks % self.configuration.snapshotInterval == 0:
+                self._emittedBatches += 1
+                elapsed = max(time.monotonic() - self._generationStartedAt, 1e-9)
+                replayTransitions = sum(len(agent.dqn.replay_buffer) for agent in self.agents)
+                optimizerUpdates = sum(agent.dqn.training_steps for agent in self.agents)
+                performance = {
+                    "physicsHz": round(1 / self.matchConfig.stepSeconds),
+                    "playbackSpeed": self.controller.playbackSpeed,
+                    "simulationStepsPerSecond": round(self._generationTicks / elapsed, 2),
+                    "snapshotsPerSecond": round(self._emittedBatches / elapsed, 2),
+                    "optimizerUpdates": optimizerUpdates,
+                    "replayTransitions": replayTransitions,
+                    "updateToDataRatio": round(
+                        optimizerUpdates / max(replayTransitions, 1), 4
+                    ),
+                }
+                for envelope in envelopes:
+                    self._emit({
+                        **envelope,
+                        "source": EVENT_SOURCE_LIVE,
+                        "performance": performance,
+                    })
+            nextTickAt = (
+                self._generationStartedAt
+                + self._generationTicks
+                * self.matchConfig.stepSeconds
+                / self.controller.playbackSpeed
+            )
+            delay = nextTickAt - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+
+        return lastEnvelopes or []
+
+    def _start_generation_simulation(self, seed: int) -> None:
+        pairs = round_robin_pairs(len(self.agents), self.generationIndex)
         assignments = []
         matchSeeds: list[int] = []
         for arenaIndex in range(len(self.agents) // 2):
             aIndex, bIndex, reversedSides = pairs[arenaIndex]
-            matchSeed = _mix(seed, self.runId, roundIndex, arenaIndex)
+            matchSeed = _mix(seed, self.runId, self.generationIndex, arenaIndex)
             agentA = self.agents[aIndex]
             agentB = self.agents[bIndex]
             assignments.append(
@@ -638,64 +709,42 @@ class EvolutionTrainingService:
                     ),
                     reversedSides=reversedSides,
                     seed=matchSeed,
-                    matchKey=f"round-{roundIndex}",
+                    matchKey=f"generation-{self.generationIndex}",
                 )
             )
             matchSeeds.append(matchSeed)
 
-        engine = SimulationEngine(assignments, self.matchConfig)
+        self._engine = SimulationEngine(assignments, self.matchConfig)
+        self._generationPairs = pairs
+        self._generationMatchSeeds = matchSeeds
+        self._pendingActions = {arenaId: ("STAY", "STAY") for arenaId in ARENA_IDS}
+        self._generationStartedAt = time.monotonic()
         self._sideLastReturns = {}
         self._lastSequences = {}
         self._clear_previous_states()
-        pendingActions = {arenaId: ("STAY", "STAY") for arenaId in ARENA_IDS}
-        lastEnvelopes: list[dict] | None = None
 
-        roundStarted = time.monotonic()
-        nextTickAt = roundStarted
-        emittedBatches = 0
-        for tick in range(self.configuration.roundTicks):
-            envelopes = engine.step(pendingActions)
-            lastEnvelopes = envelopes
-            for arenaIndex, envelope in enumerate(envelopes):
-                aIndex, bIndex, _ = pairs[arenaIndex]
-                arenaId = envelope["arenaId"]
-                if envelope["sequence"] <= self._lastSequences.get(arenaId, 0):
-                    continue
-                self._lastSequences[arenaId] = envelope["sequence"]
-                nextActions = self._advance_envelope(envelope, aIndex, bIndex)
-                if envelope["status"] != TERMINAL:
-                    pendingActions[arenaId] = nextActions
-            if (tick + 1) % self.configuration.snapshotInterval == 0:
-                emittedBatches += 1
-                elapsed = max(time.monotonic() - roundStarted, 1e-9)
-                replayTransitions = sum(len(agent.dqn.replay_buffer) for agent in self.agents)
-                optimizerUpdates = sum(agent.dqn.training_steps for agent in self.agents)
-                performance = {
-                    "physicsHz": round(1 / self.matchConfig.stepSeconds),
-                    "playbackSpeed": self.controller.playbackSpeed,
-                    "simulationStepsPerSecond": round((tick + 1) / elapsed, 2),
-                    "snapshotsPerSecond": round(emittedBatches / elapsed, 2),
-                    "optimizerUpdates": optimizerUpdates,
-                    "replayTransitions": replayTransitions,
-                    "updateToDataRatio": round(
-                        optimizerUpdates / max(replayTransitions, 1), 4
-                    ),
-                }
-                for envelope in envelopes:
-                    self._emit({
-                        **envelope,
-                        "source": EVENT_SOURCE_LIVE,
-                        "performance": performance,
-                    })
-            nextTickAt += self.matchConfig.stepSeconds / self.controller.playbackSpeed
-            delay = nextTickAt - time.monotonic()
-            if delay > 0:
-                time.sleep(delay)
-            else:
-                nextTickAt = time.monotonic()
+    def _reset_generation_simulation(self) -> None:
+        self._engine = None
+        self._generationPairs = []
+        self._generationMatchSeeds = []
+        self._pendingActions = {}
+        self._generationStartedAt = 0.0
+        self._generationTicks = 0
+        self._emittedBatches = 0
+        self._lastEnvelopes = []
+        self._sideLastReturns = {}
+        self._lastSequences = {}
+        self._clear_previous_states()
 
-        self._record_matches(roundIndex, pairs, matchSeeds, lastEnvelopes or [])
-        return lastEnvelopes
+    def _record_generation_matches(self) -> None:
+        if not self._lastEnvelopes:
+            return
+        self._record_matches(
+            self._roundIndex,
+            self._generationPairs,
+            self._generationMatchSeeds,
+            self._lastEnvelopes,
+        )
 
     def _advance_envelope(self, envelope: dict, aIndex: int, bIndex: int) -> tuple[str, str]:
         agentA = self.agents[aIndex]

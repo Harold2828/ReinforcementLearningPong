@@ -41,6 +41,7 @@ class MatchConfig:
     maxStepsPerRally: int = 1000
     maxTotalSteps: int = 5000
     winScore: int = 7
+    continuousPlay: bool = False
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,8 @@ class MatchSession:
         self.assignment = replace(self.assignment, agentA=agentA, agentB=agentB)
 
     def _match_ended(self) -> bool:
+        if self.config.continuousPlay:
+            return False
         scores = self._identity_scores()
         return max(scores) >= self.config.winScore or self.sessionSteps >= self.config.maxTotalSteps
 

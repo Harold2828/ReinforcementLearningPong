@@ -102,10 +102,10 @@ def test_wall_bounce_flips_vertical_velocity():
 
 
 def test_point_reset_matches_classic_serve_without_resetting_paddles(monkeypatch):
-    session = MatchSession(assignment(), MatchConfig())
+    session = MatchSession(assignment(), MatchConfig(winScore=1, continuousPlay=True))
     session.env.agentPaddleY = 220
     session.env.opponentPaddleY = 380
-    samples = iter((175.0, 170.0))
+    samples = iter((175.0, 170.0, 180.0, 165.0))
     monkeypatch.setattr(session.env, "_random_normal", lambda *_: next(samples))
     session.env.ballX = session.config.width - session.config.ballWidth / 2 - 1
     session.env.ballVelocityX = session.config.ballSpeedX
@@ -118,8 +118,25 @@ def test_point_reset_matches_classic_serve_without_resetting_paddles(monkeypatch
     assert envelope["ball"]["y"] == 0.5
     assert envelope["ball"]["vx"] == -1.75
     assert envelope["ball"]["vy"] == -1.7
+    assert envelope["agentA"]["score"] == 0
+    assert envelope["agentB"]["score"] == 1
     assert session.env.agentPaddleY == 220
     assert session.env.opponentPaddleY == 380
+    assert session.status != TERMINAL
+
+    session.env.ballX = session.config.ballWidth / 2 + 1
+    session.env.ballVelocityX = -session.config.ballSpeedX
+    session.env.ballVelocityY = 0
+
+    second = session.step("STAY", "STAY")
+
+    assert second["agentA"]["score"] == 1
+    assert second["agentB"]["score"] == 1
+    assert second["ball"]["x"] == 0.5
+    assert second["ball"]["y"] == 0.5
+    assert session.env.agentPaddleY == 220
+    assert session.env.opponentPaddleY == 380
+    assert session.status != TERMINAL
 
 
 def test_scoring_ownership_right_paddle_is_agent_left_is_opponent():
