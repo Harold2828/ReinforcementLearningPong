@@ -96,14 +96,14 @@ class PongTrainingEnv:
         self.agentPaddleY = self._move_paddle(self.agentPaddleY, agentAction)
         self.opponentPaddleY = self._move_paddle(self.opponentPaddleY, opponentAction)
         previousBallX = self.ballX
+        previousBallY = self.ballY
         self.ballX += self.ballVelocityX * self.config.stepSeconds
         self.ballY += self.ballVelocityY * self.config.stepSeconds
         self.stepCount += 1
 
         self._bounce_vertical_walls()
+        self._handle_paddle_collisions(previousBallX, previousBallY)
         self._handle_point()
-        if self.pointWinner is None:
-            self._handle_paddle_collisions(previousBallX)
 
         if self.stepCount >= self.config.maxStepsPerEpisode and self.pointWinner is None:
             self._finish_forced_point()
@@ -164,37 +164,42 @@ class PongTrainingEnv:
             self.ballY = self.config.height - halfHeight
             self.ballVelocityY *= -1
 
-    def _handle_paddle_collisions(self, previousBallX: float) -> None:
+    def _handle_paddle_collisions(self, previousBallX: float, previousBallY: float) -> None:
+        """Swept AABB collision: reflect at the exact plane-crossing moment.
+
+        The ball Y is sampled where its face crosses the paddle plane, so
+        fast edge grazes and high-speed balls cannot pass through.
+        """
         halfSpan = (self.config.paddleWidth + self.config.ballWidth) / 2
         rightContact = self.config.agentPaddleX - halfSpan
         leftContact = self.config.opponentPaddleX + halfSpan
-        horizontalStep = abs(self.ballX - previousBallX)
-        collisionBias = 4.0
-        if (
-            self.ballVelocityX > 0
-            and previousBallX <= rightContact < self.ballX
-            and self.ballX - rightContact <= horizontalStep + collisionBias
-        ):
-            if self._is_ball_inside_paddle(self.agentPaddleY):
+        if self.ballVelocityX > 0 and previousBallX <= rightContact < self.ballX:
+            contactY = self._contact_y(previousBallX, previousBallY, rightContact)
+            if self._is_ball_inside_paddle(self.agentPaddleY, contactY):
                 self.ballX = rightContact
                 self.ballVelocityX *= -1
-                self._apply_original_bounce(self.agentPaddleY)
+                self._apply_original_bounce(self.agentPaddleY, contactY)
                 self.comboSmash += 1
                 self.lastHitBy = "agent"
-        elif (
-            self.ballVelocityX < 0
-            and previousBallX >= leftContact > self.ballX
-            and leftContact - self.ballX <= horizontalStep + collisionBias
-        ):
-            if self._is_ball_inside_paddle(self.opponentPaddleY):
+        elif self.ballVelocityX < 0 and self.ballX <= leftContact < previousBallX:
+            contactY = self._contact_y(previousBallX, previousBallY, leftContact)
+            if self._is_ball_inside_paddle(self.opponentPaddleY, contactY):
                 self.ballX = leftContact
                 self.ballVelocityX *= -1
-                self._apply_original_bounce(self.opponentPaddleY)
+                self._apply_original_bounce(self.opponentPaddleY, contactY)
                 self.comboSmash += 1
                 self.lastHitBy = "opponent"
 
-    def _apply_original_bounce(self, paddleY: float) -> None:
-        difference = self.ballY - paddleY
+    def _contact_y(self, previousBallX: float, previousBallY: float, contactX: float) -> float:
+        """Ball Y at the instant its face crossed ``contactX`` this step."""
+        stepX = self.ballX - previousBallX
+        if abs(stepX) < 1e-9:
+            return previousBallY
+        progress = (contactX - previousBallX) / stepX
+        return previousBallY + (self.ballY - previousBallY) * progress
+
+    def _apply_original_bounce(self, paddleY: float, contactY: float) -> None:
+        difference = contactY - paddleY
         self.ballVelocityY = difference * self._random_normal(
             self.config.bounceAngleMean, self.config.bounceAngleDeviation
         )
@@ -221,9 +226,10 @@ class PongTrainingEnv:
             self.agentScore += 1
             self.pointWinner = "agent"
 
-    def _is_ball_inside_paddle(self, paddleY: float) -> bool:
+    def _is_ball_inside_paddle(self, paddleY: float, ballY: float | None = None) -> bool:
         halfHeight = (self.config.paddleHeight + self.config.ballHeight) / 2
-        return paddleY - halfHeight < self.ballY < paddleY + halfHeight
+        ballY = self.ballY if ballY is None else ballY
+        return paddleY - halfHeight <= ballY <= paddleY + halfHeight
 
     def _random_normal(self, mean: float, standardDeviation: float) -> float:
         first = 0.0

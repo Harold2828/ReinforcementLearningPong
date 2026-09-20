@@ -68,8 +68,23 @@ def test_original_phaser_wall_bounds_and_collision_order():
     assert env.ballY == halfHeight
     assert env.ballVelocityY == 200
 
+
+def test_high_speed_center_hit_bounces_not_phantom_point():
+    env = PongTrainingEnv(randomGenerator=random.Random(1))
+    contact = env.config.agentPaddleX - (env.config.paddleWidth + env.config.ballWidth) / 2
     env.ballX = 640
     env.ballY = env.agentPaddleY
+    env.ballVelocityX = 10_000
+    scored = env.step("STAY", "STAY").state
+    assert scored.ballX == contact
+    assert scored.lastHitBy == "agent"
+    assert scored.pointWinner is None
+
+
+def test_high_speed_genuine_miss_passes_and_scores():
+    env = PongTrainingEnv(randomGenerator=random.Random(1))
+    env.ballX = 640
+    env.ballY = 100
     env.ballVelocityX = 10_000
     scored = env.step("STAY", "STAY").state
     assert scored.pointWinner == "opponent"
